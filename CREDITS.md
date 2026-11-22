@@ -1,0 +1,16 @@
+# Credits
+
+- Built using CraftAnything by ArtCraft.
+- Reaction icons: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) by Microsoft,
+  Flat style, MIT licence (`assets/emoji/LICENSE`).
+- Interface icons: [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)
+  by Microsoft, MIT licence (`assets/icons/LICENSE`).
+- Calls: [webrtc-rs](https://github.com/webrtc-rs/webrtc) (MIT/Apache-2.0),
+  [cpal](https://github.com/RustAudio/cpal) (Apache-2.0), [libopus](https://opus-codec.org)
+  via the `opus` crate (BSD/MIT/Apache-2.0), [tungstenite](https://github.com/snapview/tungstenite-rs)
+  (MIT/Apache-2.0).
+- Video: [OpenH264](https://www.openh264.org) by Cisco (BSD-2-Clause) via the `openh264`
+  crate, [libv4l-rs](https://github.com/raymanfx/libv4l-rs) `v4l` crate (MIT).
+- Background blur model: MediaPipe Selfie Segmentation (landscape) by Google, ONNX conversion
+  from [onnx-community/mediapipe_selfie_segmentation_landscape](https://huggingface.co/onnx-community/mediapipe_selfie_segmentation_landscape),
+  Apache License 2.0. Run with [tract](https://github.com/sonos/tract) (Apache 2.0 / MIT).

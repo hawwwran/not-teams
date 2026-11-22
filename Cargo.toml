@@ -1,0 +1,49 @@
+[package]
+name = "notteams"
+version = "0.2.0"
+edition = "2024"
+description = "NotTeams: an unofficial native desktop client for Microsoft Teams chats"
+license = "MIT"
+
+[dependencies]
+arboard = "3.7"
+async-trait = "0.1"
+base64 = "0.23"
+chrono = "0.4.45"
+cpal = "0.18"
+dirs = "7.0.0"
+eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "persistence"] }
+flate2 = "1"
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
+ksni = { version = "0.3.7", features = ["blocking"] }
+log = "0.4"
+open = "5.4.5"
+openh264 = "0.9"
+opus = "0.4"
+rand = "0.10.4"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls", "form", "query", "gzip", "http2"] }
+resvg = "0.50.0"
+rfd = "0.17.2"
+rtc = { version = "0.21.1", default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+bytes = "1"
+ashpd = { version = "0.11", default-features = false, features = ["tokio"] }
+libc = "0.2"
+notify-rust = { version = "4", default-features = false, features = ["z"] }
+tract-onnx = "0.21"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+v4l = "0.14"
+webrtc = "0.21"
+x11-dl = "2.21"
+
+# The app menu starts the debug build. Libraries (video codecs, WebRTC, the blur model) are
+# built optimised there too, or a meeting's video stutters; NotTeams' own code keeps its
+# debug checks.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

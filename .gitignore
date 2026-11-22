@@ -1,0 +1,5 @@
+/target/
+# Local screenshots and diagnose output from real accounts
+/shots/
+# Craft Anything working note, not part of the app
+/handoff.md

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=NotTeams
+GenericName=Chat
+Comment=Unofficial desktop client for Microsoft Teams chats
+Exec=notteams
+Icon=com.hawwwran.notteams
+Terminal=false
+Categories=Network;Chat;InstantMessaging;
+StartupWMClass=com.hawwwran.notteams
