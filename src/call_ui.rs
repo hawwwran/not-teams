@@ -906,7 +906,7 @@ impl CallUi {
         let Some(feeds) = self.video.clone() else { return };
         let tiles = self.tiles(ctx, &feeds);
         // Someone's shared screen takes the big place, everyone else goes in the row below.
-        let sharer = feeds.participants.lock().ok().and_then(|p| p.iter().find(|p| p.sharing.is_some()).map(|p| p.name.clone()));
+        let sharer = self.sharer_name(&feeds);
         let screen_frame = feeds.screen_remote.lock().ok().and_then(|f| f.clone());
         refresh(ctx, &mut self.screen_tex, screen_frame.as_deref(), "shared-screen");
         if screen_frame.is_none() {
@@ -1032,7 +1032,17 @@ impl CallUi {
     fn someone_sharing(&self) -> bool {
         self.active()
             && self.share_state() != crate::screen::ShareState::Sharing
-            && self.video.as_ref().is_some_and(|v| v.participants.lock().is_ok_and(|p| p.iter().any(|p| p.sharing.is_some())))
+            && self.video.as_ref().is_some_and(|v| self.sharer_name(v).is_some())
+    }
+
+    /// Who's sharing a screen: the participant the roster says, or in a call between two
+    /// people (whose roster doesn't say) the other person while their screen is coming in.
+    fn sharer_name(&self, feeds: &crate::call::VideoFeeds) -> Option<String> {
+        let people = feeds.participants.lock().map(|p| p.clone()).unwrap_or_default();
+        people.iter().find(|p| p.sharing.is_some()).map(|p| p.name.clone()).or_else(|| {
+            let arriving = feeds.screen_remote.lock().is_ok_and(|f| f.is_some());
+            (arriving && people.len() <= 1).then(|| people.first().map_or_else(|| self.name.clone(), |p| p.name.clone()))
+        })
     }
 
     /// Everyone's camera (or picture) as small tiles over a shared screen, each one draggable

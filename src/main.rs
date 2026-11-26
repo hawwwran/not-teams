@@ -35,6 +35,7 @@ mod search_ui;
 mod sdp_ngc;
 mod settings;
 mod settings_ui;
+mod sounds;
 mod splash;
 mod theme;
 mod tray;
@@ -655,6 +656,7 @@ fn diagnose(send: bool, all: bool) {
                 match crate::trouter::connect(&creds, &endpoint) {
                     Ok(conn) => {
                         println!("pushtest: register {:?}", crate::trouter::register(&creds, &conn, &endpoint, &app, &template, &path).map(|(s, b)| (s, b.chars().take(200).collect::<String>())));
+                        println!("pushtest: endpoint {endpoint} surl {}", conn.surl);
                         let started = std::time::Instant::now();
                         let mut typed = false;
                         while started.elapsed().as_secs() < secs {
@@ -728,6 +730,28 @@ fn diagnose(send: bool, all: bool) {
     // are accepted up to the lookup (nothing real is answered).
     if std::env::args().any(|a| a == "respondtest") {
         println!("respondtest: {:?}", t.respond_event("AAMkAGNotARealEventId", crate::calendar::Rsvp::Tentative));
+    }
+    // `tokenfile <scope> <path>`: writes a token for that scope to a new file only the user can
+    // read, for a local test that needs it (never printed).
+    if let Some(scope) = arg_after("tokenfile") {
+        let path = std::env::args().skip_while(|a| a != "tokenfile").nth(2).unwrap_or_default();
+        let written = t.bearer(&scope).and_then(|tok| {
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).and_then(|mut f| f.write_all(tok.as_bytes())).map_err(|e| e.to_string())
+        });
+        println!("tokenfile: {:?}", written.map(|_| path));
+    }
+    // `calldump <callee mri> <surl> <file>`: writes the request a direct call to that person
+    // would send, callback links under <surl>, without calling.
+    if let Some(callee) = arg_after("calldump") {
+        let rest: Vec<String> = std::env::args().skip_while(|a| a != "calldump").skip(2).collect();
+        let endpoint = crate::settings::Settings::load().presence_endpoint_id;
+        let dumped = t
+            .call_setup(&endpoint, &callee, "Callee", false)
+            .and_then(|setup| call::direct_request_for_inspection(setup, rest.first().map(String::as_str).unwrap_or("https://SURL/")))
+            .and_then(|body| std::fs::write(rest.get(1).map(String::as_str).unwrap_or("calldump.json"), serde_json::to_string_pretty(&body).unwrap_or_default()).map_err(|e| e.to_string()));
+        println!("calldump: {dumped:?}");
     }
     // `tokentest <scope>...`: whether a token for each scope can be had (audience and scopes only).
     if std::env::args().any(|a| a == "tokentest") {
@@ -959,6 +983,10 @@ fn main() -> eframe::Result<()> {
         .with_app_id(brand::APP_ID)
         .with_inner_size([1280.0, 800.0])
         .with_min_inner_size([480.0, 400.0]);
+    // WINDOW_SIZE=<w>x<h>: start at that size, for checking layouts in screenshots.
+    if let Some((w, h)) = brand::env("WINDOW_SIZE").and_then(|v| v.split_once('x').and_then(|(w, h)| Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?)))) {
+        viewport = viewport.with_inner_size([w, h]);
+    }
     if let Some(icon) = window_icon() {
         viewport = viewport.with_icon(icon);
     }

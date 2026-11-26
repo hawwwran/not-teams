@@ -96,14 +96,26 @@ pub fn open(latest: Latest, path: &str) -> Result<Camera, String> {
                     continue;
                 }
                 seq += 1;
+                let (w, h, rgba) = widescreen(width, height, rgba);
                 if let Ok(mut slot) = out.lock() {
-                    *slot = Some(Arc::new(Frame { width, height, rgba, seq, source: None }));
+                    *slot = Some(Arc::new(Frame { width: w, height: h, rgba, seq, source: None }));
                 }
             }
         })
         .map_err(|e| e.to_string())?;
     ready_rx.recv().map_err(|_| "Camera thread failed.".to_string())??;
     Ok(Camera { latest, stop })
+}
+
+/// The middle 16:9 band of a taller picture (a 4:3 camera's 640×480 becomes 640×360). Teams
+/// shows cameras as 16:9, and a 4:3 picture came out stretched on the others' screens.
+fn widescreen(width: usize, height: usize, rgba: Vec<u8>) -> (usize, usize, Vec<u8>) {
+    let h = (width * 9 / 16) & !1;
+    if h == 0 || h >= height {
+        return (width, height, rgba);
+    }
+    let top = ((height - h) / 2) * width * 4;
+    (width, h, rgba[top..top + h * width * 4].to_vec())
 }
 
 /// Moving colour bars instead of the camera (FAKE_CAMERA), for testing video without
@@ -126,8 +138,9 @@ fn test_pattern(latest: Latest) -> Camera {
                     rgba.extend([c[0], c[1], c[2], 255]);
                 }
             }
+            let (w2, h2, rgba) = widescreen(w, h, rgba);
             if let Ok(mut slot) = out.lock() {
-                *slot = Some(Arc::new(Frame { width: w, height: h, rgba, seq, source: None }));
+                *slot = Some(Arc::new(Frame { width: w2, height: h2, rgba, seq, source: None }));
             }
             std::thread::sleep(std::time::Duration::from_millis(1000 / FPS as u64));
         }
@@ -151,6 +164,14 @@ fn yuyv_to_rgba(buf: &[u8], width: usize, height: usize) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cameras_are_sent_widescreen() {
+        let (w, h, px) = super::widescreen(640, 480, vec![7; 640 * 480 * 4]);
+        assert_eq!((w, h, px.len()), (640, 360, 640 * 360 * 4));
+        let (w, h, _) = super::widescreen(1280, 720, vec![0; 1280 * 720 * 4]);
+        assert_eq!((w, h), (1280, 720), "already 16:9");
+    }
+
     #[test]
     fn grey_yuyv_is_grey() {
         let rgba = super::yuyv_to_rgba(&[128, 128, 128, 128], 2, 1);

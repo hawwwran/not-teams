@@ -20,6 +20,7 @@ const CHAT_PATH: &str = "messaging";
 /// The web client's current template. The older 2.6 delivers messages but not typing.
 const CHAT_TEMPLATE: &str = "TeamsCDLWebWorker_2.7";
 const EVT_RINGING: i64 = 109;
+const EVT_DIRECT_RINGING: i64 = 107;
 /// Sent just before the ring with the conversation's details; nothing to act on.
 const EVT_CONVERSATION: i64 = 115;
 
@@ -40,6 +41,12 @@ pub enum RingEvent {
     Typing { chat_id: String, mri: String, name: String, typing: bool },
     /// A message in this chat arrived or changed; `from` sent it.
     ChatChanged { chat_id: String, from: String },
+}
+
+/// The endpoint id registered for web-style calling, derived from the app's endpoint so a
+/// restart replaces the registration instead of adding one.
+pub fn web_calling_endpoint(endpoint_id: &str) -> String {
+    format!("ca11{}", endpoint_id.get(4..).unwrap_or_default())
 }
 
 /// Starts listening on its own thread; the flag turns false when the connection drops, so
@@ -67,6 +74,13 @@ fn run(creds: &trouter::Credentials, endpoint_id: &str, on: &dyn Fn(RingEvent)) 
     if !(200..300).contains(&status) {
         return Err(format!("registrar refused ({status}): {}", body.chars().take(120).collect::<String>()));
     }
+    // A person's direct call rings only endpoints registered the web client's way (its pushes
+    // come to the connection's own address, not a path), so the listener is that too. A direct
+    // call we place names this endpoint as ours (`web_calling_endpoint`).
+    match trouter::register(creds, &conn, &web_calling_endpoint(endpoint_id), "SkypeSpacesWeb", "SkypeSpacesWeb_2.6", "") {
+        Ok((status, _)) if (200..300).contains(&status) => {}
+        other => crate::call::call_log(&format!("web-style calling registration refused {:?}", other.map(|(s, _)| s))),
+    }
     // A registration holds one app, so chat events need a second id. Derived from ours so a
     // restart replaces the registration instead of adding one.
     let chat_registration = format!("c4a7{}", endpoint_id.get(4..).unwrap_or(endpoint_id));
@@ -81,7 +95,11 @@ fn run(creds: &trouter::Credentials, endpoint_id: &str, on: &dyn Fn(RingEvent)) 
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return Err("connection closed".into()),
         };
         let _ = conn.replies.send(trouter::Reply::Answer(id, 200, Value::Null));
-        let event = if pushed.url.ends_with(RING_PATH) {
+        let call_event = pushed.url.ends_with(RING_PATH) || (pushed.url.ends_with('/') && pushed.body["evt"].is_i64());
+        let event = if call_event {
+            // Which call events come, by number and fields (no content), for when a call doesn't ring.
+            let fields: Vec<&str> = pushed.body.as_object().map(|o| o.keys().map(String::as_str).collect()).unwrap_or_default();
+            crate::call::call_log(&format!("call event {} {:?}", pushed.body["evt"], fields));
             read(&pushed.body)
         } else if pushed.url.ends_with(CHAT_PATH) {
             read_chat(&pushed.body)
@@ -89,16 +107,34 @@ fn run(creds: &trouter::Credentials, endpoint_id: &str, on: &dyn Fn(RingEvent)) 
             None
         };
         if let Some(event) = event {
+            match &event {
+                RingEvent::Ringing(r) => crate::call::call_log(&format!("incoming call {} from {} rings", r.call_id, r.caller_name)),
+                RingEvent::Stopped(id) => crate::call::call_log(&format!("incoming call {id} stopped ringing")),
+                _ => {}
+            }
             on(event);
         }
     }
 }
 
 fn read(body: &Value) -> Option<RingEvent> {
-    let call_id = body["callId"].as_str()?.to_string();
-    match body["evt"].as_i64()? {
-        EVT_RINGING => {
-            let notice = crate::call::decode_gz_field(&body["cp"])?;
+    let evt = body["evt"].as_i64()?;
+    // A person's direct (one-to-one) call comes as 107 with the notice plain in `gp`; a call
+    // through a group conversation as 109 with it gzipped in `cp` (recorded 2026-11-24).
+    let notice = match evt {
+        EVT_RINGING => crate::call::decode_gz_field(&body["cp"]),
+        EVT_DIRECT_RINGING => decode_plain_field(&body["gp"]),
+        _ => None,
+    };
+    // Later events carry the call id as the `correlationId` of their `cp`, the direct notice
+    // inside its debug content; older pushes at the top.
+    let call_id = body["callId"]
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| notice.as_ref().and_then(|n| n["debugContent"]["callId"].as_str().map(str::to_string)))
+        .or_else(|| crate::call::decode_gz_field(&body["cp"]).and_then(|c| c["correlationId"].as_str().map(str::to_string)))?;
+    match (evt, notice) {
+        (EVT_RINGING | EVT_DIRECT_RINGING, Some(notice)) => {
             let from = &notice["callNotification"]["from"];
             Some(RingEvent::Ringing(Ring {
                 call_id,
@@ -107,9 +143,18 @@ fn read(body: &Value) -> Option<RingEvent> {
                 notice,
             }))
         }
-        EVT_CONVERSATION => None,
+        (EVT_RINGING | EVT_DIRECT_RINGING | EVT_CONVERSATION, _) => None,
         _ => Some(RingEvent::Stopped(call_id)),
     }
+}
+
+/// A base64 field holding JSON, gzipped or not.
+fn decode_plain_field(v: &Value) -> Option<Value> {
+    use base64::Engine;
+    crate::call::decode_gz_field(v).or_else(|| {
+        let raw = base64::engine::general_purpose::STANDARD.decode(v.as_str()?.trim()).ok()?;
+        serde_json::from_slice(&raw).ok()
+    })
 }
 
 /// A chat service push → what changed. `from` and `to` are links or ids; the last part is
@@ -154,6 +199,19 @@ mod tests {
             "messagetype": "RichText/Html", "from": "https://x/contacts/8:orgid:abc",
             "conversationLink": "https://x/v1/users/ME/conversations/19:y@thread.v2"}});
         assert!(matches!(read_chat(&message), Some(RingEvent::ChatChanged { chat_id, from }) if chat_id == "19:y@thread.v2" && from == "8:orgid:abc"));
+    }
+
+    #[test]
+    fn a_direct_call_rings_and_stops() {
+        use base64::Engine;
+        let notice = serde_json::json!({"callNotification": {"from": {"id": "8:orgid:r", "displayName": "Radim"}}, "debugContent": {"callId": "c107"}});
+        let gp = base64::engine::general_purpose::STANDARD.encode(notice.to_string());
+        let ring = read(&serde_json::json!({"evt": 107, "gp": gp}));
+        assert!(matches!(ring, Some(RingEvent::Ringing(r)) if r.call_id == "c107" && r.caller_name == "Radim"));
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        std::io::Write::write_all(&mut gz, br#"{"correlationId": "c107"}"#).unwrap();
+        let cp = base64::engine::general_purpose::STANDARD.encode(gz.finish().unwrap());
+        assert!(matches!(read(&serde_json::json!({"evt": 116, "cp": cp})), Some(RingEvent::Stopped(id)) if id == "c107"));
     }
 
     #[test]

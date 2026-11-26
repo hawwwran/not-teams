@@ -40,6 +40,10 @@ pub struct Settings {
     pub desktop_notifications: bool,
     /// A notification shortly before a Teams meeting in the calendar starts.
     pub meeting_reminders: bool,
+    /// A large alert with a sound when a meeting starts in one of my meeting or group chats.
+    pub meeting_start_alerts: bool,
+    /// Which of the built-in sounds plays for a message, a call and a meeting starting.
+    pub sounds: crate::sounds::Choice,
 }
 
 impl Default for Settings {
@@ -60,6 +64,8 @@ impl Default for Settings {
             activity_seen: Vec::new(),
             desktop_notifications: true,
             meeting_reminders: true,
+            meeting_start_alerts: true,
+            sounds: Default::default(),
         }
     }
 }

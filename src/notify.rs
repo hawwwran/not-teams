@@ -58,27 +58,8 @@ impl Notifier {
             return;
         }
         self.last_ping = Some(Instant::now());
-        play_sound();
+        crate::sounds::play_for(crate::sounds::Event::Message);
     }
-}
-
-/// The desktop's own "new message" sound (freedesktop sound theme), played without waiting.
-fn play_sound() {
-    std::thread::spawn(|| {
-        let played = std::process::Command::new("canberra-gtk-play")
-            .args(["-i", "message-new-instant", "-d", crate::brand::NAME])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if !played {
-            let _ = std::process::Command::new("pw-play")
-                .arg("/usr/share/sounds/freedesktop/stereo/message-new-instant.oga")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-        }
-    });
 }
 
 /// The unread count on the taskbar entry, through the launcher-entry signal that Zorin's
@@ -104,9 +85,15 @@ pub fn launcher_count(unread: usize) {
     });
 }
 
-/// One ring of the desktop's incoming-call sound; the call window repeats it while ringing.
+/// One ring of the incoming-call sound chosen in Settings; the call window repeats it while
+/// ringing.
 pub fn play_ringtone() {
-    play_theme_sound("phone-incoming-call");
+    crate::sounds::play_for(crate::sounds::Event::Call);
+}
+
+/// The sound chosen for a meeting that just started.
+pub fn play_meeting_alert() {
+    crate::sounds::play_for(crate::sounds::Event::MeetingStarted);
 }
 
 /// One ring of the "calling..." sound, repeated while the other side is being rung.
@@ -144,6 +131,8 @@ pub enum NoteAction {
     ShowWindow,
     /// Join the calendar meeting with this event id.
     JoinMeeting(String),
+    /// Join the meeting going on in this chat.
+    JoinLive(String),
 }
 
 pub type NoteSender = std::sync::mpsc::Sender<NoteAction>;
@@ -236,6 +225,35 @@ pub fn incoming_call(call_id: &str, caller: &str, caller_mri: Option<&str>, out:
 }
 
 /// A Teams meeting about to start, with a Join button.
+/// A meeting that just started in one of my chats; Join opens the check before joining.
+pub fn meeting_started(chat_id: &str, title: &str, detail: &str, out: NoteSender, ctx: eframe::egui::Context) {
+    let mut n = base();
+    if let Some(image) = note_image(None) {
+        n.image_path(&image);
+    }
+    n.summary(&format!("Meeting started: {title}"))
+        .body(&escape(detail))
+        .action("join", "Join")
+        .action("default", "Show")
+        .urgency(notify_rust::Urgency::Critical)
+        .hint(notify_rust::Hint::Category("x-notteams.meeting".into()));
+    let Ok(handle) = n.show() else { return };
+    let id = chat_id.to_string();
+    std::thread::spawn(move || {
+        handle.wait_for_action(|action| {
+            let a = match action {
+                "join" => Some(NoteAction::JoinLive(id)),
+                "default" => Some(NoteAction::ShowWindow),
+                _ => None,
+            };
+            if let Some(a) = a {
+                let _ = out.send(a);
+                ctx.request_repaint();
+            }
+        });
+    });
+}
+
 pub fn meeting_reminder(event: &crate::calendar::CalendarEvent, out: NoteSender, ctx: eframe::egui::Context) {
     let minutes = (event.start - chrono::Local::now()).num_minutes();
     let when = match minutes {

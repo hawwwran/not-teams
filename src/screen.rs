@@ -15,9 +15,11 @@ use ashpd::desktop::screencast::{CursorMode, Screencast, SourceType};
 
 use crate::camera::{Frame, Latest};
 
-/// What's sent: 720p at 10 frames a second is sharp enough for text and light on the line.
-pub const WIDTH: usize = 1280;
-pub const HEIGHT: usize = 720;
+/// What's sent at most: 1080p at 10 frames a second, so text stays readable (720p was blurry
+/// on a large screen). Teams says per call how much it takes (`vdclc`); the encoder scales down
+/// to that.
+pub const WIDTH: usize = 1920;
+pub const HEIGHT: usize = 1080;
 pub const FPS: u32 = 10;
 
 /// Where a share stands, for the window to show.

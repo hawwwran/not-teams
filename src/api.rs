@@ -140,6 +140,8 @@ pub struct Message {
     pub edited: bool,
     /// Tables in the message; `text` holds `html::TABLE_MARK` where each one goes.
     pub tables: Vec<html::Table>,
+    /// Messages this one replies to, quoted above its text.
+    pub quotes: Vec<html::Quote>,
 }
 
 /// A finished call, from an `Event/Call` message.
@@ -938,6 +940,7 @@ impl Teams {
             callee_name: String::new(),
             test: false,
             host_only: false,
+            group_form: false,
             meeting: None,
             incoming: None,
             chat_id: String::new(),
@@ -1176,6 +1179,7 @@ impl Teams {
         let deleted = !str_at(m, &["properties", "deletetime"]).is_empty()
             || m["properties"]["deletetime"].as_i64().is_some();
         let mut tables = Vec::new();
+        let mut quotes = Vec::new();
         let (text, is_event) = match kind {
             "Text" | "RichText" | "RichText/Html" => {
                 if deleted {
@@ -1185,7 +1189,9 @@ impl Teams {
                     if kind == "Text" {
                         (content.to_string(), false)
                     } else {
-                        let (t, found) = html::with_tables(&crate::attachments::strip_ams_images(content));
+                        let (without_quotes, found_quotes) = html::with_quotes(content);
+                        quotes = found_quotes;
+                        let (t, found) = html::with_tables(&crate::attachments::strip_ams_images(&without_quotes));
                         tables = found;
                         (t, false)
                     }
@@ -1217,6 +1223,7 @@ impl Teams {
                     call: Some(call),
                     edited: false,
                     tables: Vec::new(),
+                    quotes: Vec::new(),
                 });
             }
             _ => return None,
@@ -1256,6 +1263,7 @@ impl Teams {
                 call: None,
                 edited: false,
                 tables: Vec::new(),
+                quotes: Vec::new(),
             });
         }
         Some(Message {
@@ -1275,6 +1283,7 @@ impl Teams {
             call: None,
             edited: !deleted && (!str_at(m, &["properties", "edittime"]).is_empty() || m["properties"]["edittime"].as_i64().is_some()),
             tables,
+            quotes,
         })
     }
 

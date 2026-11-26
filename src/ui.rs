@@ -112,6 +112,10 @@ pub struct TeamsApp {
     /// What's known about meetings going on (by chat), and when each was last asked for.
     meeting_info: HashMap<String, crate::api::MeetingInfo>,
     meeting_info_asked: HashMap<String, Instant>,
+    /// Chats with a meeting going on at the last chat list (None before the first), to notice
+    /// one starting; and the alert for the one that just started.
+    live_meetings: Option<std::collections::HashSet<String>>,
+    meeting_alert: Option<MeetingAlert>,
     /// OPEN_CHAT's chat has been found and opened.
     open_chat_found: bool,
     /// A message to scroll to and mark when its chat shows: (chat, message, when it was first
@@ -216,6 +220,8 @@ impl TeamsApp {
             prejoin: None,
             pending_join: None,
             open_chat_found: false,
+            live_meetings: None,
+            meeting_alert: None,
             meeting_info: HashMap::new(),
             meeting_info_asked: HashMap::new(),
             focus_message: None,
@@ -317,6 +323,7 @@ impl TeamsApp {
                     // Teams answers again: an earlier "can't reach" no longer applies.
                     self.error = None;
                     self.chats = chats;
+                    self.notice_started_meetings(ctx);
                     // Keep new chats in the list until the service lists them itself.
                     self.local_chats.retain(|l| !self.chats.iter().any(|c| c.id == l.id));
                     for (i, l) in self.local_chats.iter().enumerate() {
@@ -638,6 +645,10 @@ impl TeamsApp {
                 }
                 crate::notify::NoteAction::Decline(id) => self.call.answer_from_note = Some((id, false)),
                 crate::notify::NoteAction::ShowWindow => crate::tray::show_window(ctx),
+                crate::notify::NoteAction::JoinLive(chat_id) => {
+                    crate::tray::show_window(ctx);
+                    self.join_live(&chat_id);
+                }
                 crate::notify::NoteAction::JoinMeeting(id) => {
                     let event = self.upcoming.iter().find(|e| e.id == id).or_else(|| self.calendar.event(&id)).cloned();
                     if let Some((meetup, title)) = event.and_then(|e| e.meeting.clone().map(|m| (m, e.subject.clone()))) {
@@ -822,6 +833,11 @@ impl eframe::App for TeamsApp {
                 self.calendar.open_card(&id);
             }
         }
+        // FAKE_MEETING_ALERT: show a started meeting's card (no sound, no notification), for
+        // checking its look.
+        if ctx.cumulative_frame_nr() == 0 && crate::brand::env("FAKE_MEETING_ALERT").is_some() {
+            self.meeting_alert = Some(MeetingAlert { chat_id: "fake".into(), title: "Team stand-up".into(), since: Instant::now(), sounded: MEETING_ALERT_SOUNDS });
+        }
         // OPEN_PREJOIN: start with the check before joining (for a made-up meeting), for checking it.
         if ctx.cumulative_frame_nr() == 0 && crate::brand::env("OPEN_PREJOIN").is_some() {
             let meetup = crate::api::Meetup { thread_id: "19:meeting_sample@thread.v2".into(), message_id: "0".into(), organizer_id: String::new(), tenant_id: String::new(), kind: "scheduledMeeting".into() };
@@ -941,6 +957,12 @@ impl TeamsApp {
                         apply_reaction(msg, &key, add);
                     }
                     self.send(Command::React { chat_id, message_id, key, add });
+                }
+                MediaAction::ShowMessage(message_id) => {
+                    if let Some(chat) = self.selected.clone() {
+                        self.scroll_to_bottom = false;
+                        self.focus_message = Some((chat, message_id, None));
+                    }
                 }
                 MediaAction::EditMessage { message_id } => {
                     let Some(chat_id) = self.selected.clone() else { continue };
@@ -1436,6 +1458,113 @@ impl TeamsApp {
             self.ask_to_join(meetup, title, Some(chat_id));
         }
         self.prejoin_window(ctx);
+        self.meeting_alert_card(ctx);
+    }
+
+    /// A meeting that started since the last chat list, in a meeting or group chat of mine:
+    /// a large card, a desktop notification and an alarm, unless it's my own call.
+    fn notice_started_meetings(&mut self, ctx: &egui::Context) {
+        let live: std::collections::HashSet<String> = self
+            .chats
+            .iter()
+            .filter(|c| c.meetup.is_some() && c.partner.is_none() && c.id != crate::api::SELF_CHAT_ID)
+            .map(|c| c.id.clone())
+            .collect();
+        // The meeting ended (or was never there) in a chat we know: the alert goes too.
+        if self.meeting_alert.as_ref().is_some_and(|a| !live.contains(&a.chat_id) && self.chats.iter().any(|c| c.id == a.chat_id)) {
+            self.meeting_alert = None;
+        }
+        let started: Vec<String> = match &self.live_meetings {
+            Some(before) => live.difference(before).cloned().collect(),
+            None => Vec::new(),
+        };
+        self.live_meetings = Some(live);
+        if !self.settings.settings.meeting_start_alerts {
+            return;
+        }
+        let mine = |id: &String| (self.call.active() || self.call.joining) && self.call.chat_id.as_deref() == Some(id.as_str());
+        let Some(chat) = started.iter().filter(|id| !mine(id)).find_map(|id| self.chats.iter().find(|c| c.id == *id)).cloned() else { return };
+        crate::call::call_log(&format!("meeting started in {}", chat.title));
+        self.meeting_alert = Some(MeetingAlert { chat_id: chat.id.clone(), title: chat.title.clone(), since: Instant::now(), sounded: 1 });
+        crate::notify::play_meeting_alert();
+        crate::tray::show_window(ctx);
+        let _ = self.worker.tx.send(Command::MeetingInfo { thread_id: chat.id.clone() });
+        let place = chat.team.as_ref().map(|t| format!("In {t}")).unwrap_or_else(|| "Teams meeting".to_string());
+        crate::notify::meeting_started(&chat.id, &chat.title, &place, self.notes.0.clone(), ctx.clone());
+    }
+
+    /// Opens the check before joining the meeting going on in this chat.
+    fn join_live(&mut self, chat_id: &str) {
+        self.meeting_alert = None;
+        if let Some(chat) = self.chats.iter().find(|c| c.id == chat_id).cloned() {
+            if let Some(meetup) = chat.meetup {
+                self.ask_to_join(meetup, chat.title, Some(chat.id));
+            }
+        }
+    }
+
+    /// The card of a meeting that just started: big, at the top of the window, with Join; the
+    /// alarm sounds again a couple of times while it shows.
+    fn meeting_alert_card(&mut self, ctx: &egui::Context) {
+        let Some(alert) = self.meeting_alert.as_mut() else { return };
+        if alert.since.elapsed() > MEETING_ALERT_SHOWN || self.call.active() {
+            self.meeting_alert = None;
+            return;
+        }
+        let due = alert.sounded < MEETING_ALERT_SOUNDS && alert.since.elapsed() >= MEETING_ALERT_REPEAT * alert.sounded;
+        if due {
+            alert.sounded += 1;
+            crate::notify::play_meeting_alert();
+        }
+        ctx.request_repaint_after(Duration::from_millis(500));
+        let (chat_id, title) = (alert.chat_id.clone(), alert.title.clone());
+        let info = self.meeting_info.get(&chat_id).cloned();
+        let mut action: Option<bool> = None;
+        egui::Area::new(egui::Id::new("meeting-alert"))
+            .order(egui::Order::Foreground)
+            .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 70.0))
+            .show(ctx, |ui| {
+                Frame::new()
+                    .fill(BG_1)
+                    .stroke(Stroke::new(2.0, BRAND))
+                    .corner_radius(CornerRadius::same(RADIUS_L))
+                    .shadow(egui::Shadow { offset: [0, 8], blur: 28, spread: 0, color: Color32::from_black_alpha(70) })
+                    .inner_margin(Margin::same(22))
+                    .show(ui, |ui| {
+                        ui.set_width(460.0);
+                        ui.horizontal(|ui| {
+                            let (r, _) = ui.allocate_exact_size(Vec2::splat(48.0), Sense::hover());
+                            ui.painter().circle_filled(r.center(), 24.0, BRAND);
+                            crate::icons::paint(ui, r.shrink(12.0), Icon::Video, Color32::WHITE);
+                            ui.add_space(10.0);
+                            ui.vertical(|ui| {
+                                ui.label(RichText::new("Meeting started").font(theme::strong(13.0)).color(BRAND));
+                                ui.add(egui::Label::new(RichText::new(&title).font(theme::strong(20.0)).color(FG_1)).truncate());
+                                let who = info.as_ref().and_then(|i| i.started_by.clone().or_else(|| i.organizer.clone()));
+                                if let Some(who) = who {
+                                    ui.label(RichText::new(format!("Started by {who}")).font(theme::body()).color(FG_2));
+                                }
+                            });
+                        });
+                        ui.add_space(14.0);
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.spacing_mut().button_padding = Vec2::new(16.0, 6.0);
+                            if crate::call_ui::join_button(ui, true).clicked() {
+                                action = Some(true);
+                            }
+                            ui.add_space(8.0);
+                            let dismiss = egui::Button::new("Dismiss").corner_radius(CornerRadius::same(RADIUS)).min_size(Vec2::new(0.0, 32.0));
+                            if ui.add(dismiss).clicked() {
+                                action = Some(false);
+                            }
+                        });
+                    });
+            });
+        match action {
+            Some(true) => self.join_live(&chat_id),
+            Some(false) => self.meeting_alert = None,
+            None => {}
+        }
     }
 
     /// My status message in the profile menu: what it says now, and a field to change it.
@@ -2238,13 +2367,8 @@ impl TeamsApp {
                 let content_w = (width - 40.0).min(1000.0);
                 let side = ((width - content_w) / 2.0).max(20.0);
                 Frame::new()
-                    .inner_margin(Margin {
-                        left: side as i8,
-                        right: side as i8,
-                        top: 16,
-                        bottom: 16,
-                    })
-                    .show(ui, |ui| {
+                    .inner_margin(Margin { left: 0, right: 0, top: 16, bottom: 16 })
+                    .show(ui, |ui| centered_column(ui, side, content_w, |ui| {
                         ui.set_width(content_w);
                         let Some(messages) = messages else {
                             ui.add_space(40.0);
@@ -2320,7 +2444,7 @@ impl TeamsApp {
                                 egui::style::ScrollAnimation::none(),
                             );
                         }
-                    });
+                    }));
             })
             .content_size
             .y
@@ -2386,13 +2510,8 @@ impl TeamsApp {
         let side = ((full_w - content_w) / 2.0).max(20.0);
         Frame::new()
             .fill(BG_3)
-            .inner_margin(Margin {
-                left: side as i8,
-                right: side as i8,
-                top: 8,
-                bottom: 16,
-            })
-            .show(ui, |ui| {
+            .inner_margin(Margin { left: 0, right: 0, top: 8, bottom: 16 })
+            .show(ui, |ui| centered_column(ui, side, content_w, |ui| {
                 ui.set_width(content_w);
                 if let Some(text) = self.typing_line(chat_id) {
                     ui.label(RichText::new(text).font(theme::caption()).color(FG_2));
@@ -2517,7 +2636,7 @@ impl TeamsApp {
                         self.pending.entry(chat_id.to_string()).or_default().extend(paths);
                     }
                 }
-            });
+            }));
         if typed {
             self.say_typing(chat_id);
         }
@@ -2527,6 +2646,21 @@ impl TeamsApp {
         }
     }
 }
+
+/// A meeting that just started in one of my chats, while its card shows.
+struct MeetingAlert {
+    chat_id: String,
+    title: String,
+    since: Instant,
+    /// How many times the alarm has sounded.
+    sounded: u32,
+}
+
+/// The card of a started meeting stays this long unless answered; its alarm sounds this many
+/// times, this far apart.
+const MEETING_ALERT_SHOWN: Duration = Duration::from_secs(90);
+const MEETING_ALERT_SOUNDS: u32 = 3;
+const MEETING_ALERT_REPEAT: Duration = Duration::from_secs(4);
 
 /// After a found message first shows, how long its chat keeps scrolling it into view (pictures
 /// above it may still be loading), and how long it stays marked.
@@ -2655,6 +2789,24 @@ fn tab(ui: &mut egui::Ui, label: &str, active: bool) {
             Stroke::new(3.0, BRAND),
         );
     }
+}
+
+/// A column `content_w` wide with `side` empty on each side: how the chat and its compose box
+/// stay centred in a wide window (egui's frame margins stop at 127 px).
+fn centered_column<R>(ui: &mut egui::Ui, side: f32, content_w: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let spacing = ui.spacing().item_spacing;
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(side);
+        let inner = ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing = spacing;
+            ui.set_width(content_w);
+            add(ui)
+        });
+        ui.add_space(side);
+        inner.inner
+    })
+    .inner
 }
 
 /// A thin line under the pinned chat, setting it apart from the list.
@@ -3087,11 +3239,17 @@ fn channel_post(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, post: &Po
 /// A message's text, with its tables drawn as grids where they stood and Teams' emoji as their
 /// colour pictures.
 fn message_bubble(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, m: &Message, fill: Color32, max_w: f32) {
-    if m.tables.is_empty() && !m.text.contains(crate::html::EMOJI_START) {
+    if m.tables.is_empty() && m.quotes.is_empty() && !m.text.contains(crate::html::EMOJI_START) {
         return bubble(ui, &m.text, fill, max_w);
     }
     bubble_frame(fill).show(ui, |ui| {
         ui.set_max_width(max_w - 32.0);
+        for q in &m.quotes {
+            if quote_box(ui, q).clicked() && !q.message_id.is_empty() {
+                media.actions.push(crate::media_ui::MediaAction::ShowMessage(q.message_id.clone()));
+            }
+            ui.add_space(6.0);
+        }
         let mut tables = m.tables.iter();
         for (i, piece) in m.text.split(crate::html::TABLE_MARK).enumerate() {
             if i > 0 {
@@ -3164,6 +3322,29 @@ fn emoji(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, id: &str, alt: &
             ui.add(egui::Label::new(RichText::new(alt).font(theme::body()).color(FG_1)));
         }
     }
+}
+
+/// A quoted message above a reply: a grey box with a bar at the left, who wrote it and when,
+/// and the start of it, as Teams shows it. Clicking it shows the quoted message.
+fn quote_box(ui: &mut egui::Ui, q: &crate::html::Quote) -> egui::Response {
+    let inner = Frame::new()
+        .fill(BG_3)
+        .stroke(Stroke::new(1.0, STROKE_2))
+        .corner_radius(CornerRadius::same(RADIUS))
+        .inner_margin(Margin { left: 14, right: 12, top: 6, bottom: 6 })
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&q.author).font(theme::caption()).color(FG_2));
+                if let Some(t) = q.time_ms {
+                    ui.label(RichText::new(message_time(t)).font(theme::caption()).color(FG_3));
+                }
+            });
+            let preview: String = q.preview.chars().take(300).collect();
+            ui.add(egui::Label::new(RichText::new(preview).font(theme::body()).color(FG_1)).wrap().selectable(false));
+        });
+    let r = inner.response.rect;
+    ui.painter().vline(r.left() + 4.0, (r.top() + 6.0)..=(r.bottom() - 6.0), Stroke::new(3.0, STROKE_1));
+    inner.response.interact(Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Show the quoted message")
 }
 
 /// A message's table: a grid with a bold header row and lines between rows, scrolling

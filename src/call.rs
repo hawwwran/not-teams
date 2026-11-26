@@ -221,6 +221,9 @@ pub struct CallSetup {
     pub test: bool,
     /// Start the call and wait for others to join it from the chat, ringing nobody.
     pub host_only: bool,
+    /// Ring a person through a group conversation (Teams' media processor in the middle)
+    /// instead of directly; set after a direct call got no answer from any device.
+    pub group_form: bool,
     /// Join this meeting (or group call) that's going on in a chat, instead of calling.
     pub meeting: Option<crate::api::Meetup>,
     /// For a call we're answering: the decoded incoming-call notice. The caller is then
@@ -236,13 +239,12 @@ impl CallSetup {
     }
 
     /// A call to a person placed the way the web client does: the person is in the call
-    /// request itself, their devices answer our offer directly, and media changes come as
-    /// renegotiations. Off unless NOTTEAMS_DIRECT_CALLS is set: the other side's Teams desktop
-    /// didn't ring for it (2026-11-19) while the conversation-and-add form, where Teams' media
-    /// processor makes the offer, rang and connected; that form also gets their video now,
-    /// through source requests on the data channel.
+    /// request itself, their devices answer our offer directly, and they see a one-to-one
+    /// call. The group form (conversation-and-add) shows as a group call ("meeting") to them;
+    /// it's used when no device answers the direct offer (`NO_DEVICE_ANSWER`), as their
+    /// desktop didn't on 2026-11-19, or always with NOTTEAMS_GROUP_CALLS=1.
     fn direct(&self) -> bool {
-        self.rings_person() && crate::brand::env("DIRECT_CALLS").is_some()
+        self.rings_person() && !self.group_form && crate::brand::env("GROUP_CALLS").is_none()
     }
 }
 
@@ -271,16 +273,30 @@ pub fn start_call(setup: CallSetup, report: impl Fn(CallState) + Send + 'static)
     std::thread::Builder::new()
         .name("call".into())
         .spawn(move || {
-            let reason = match run(&setup, &rx, call_levels, call_video, &report) {
-                Ok(r) => r,
-                Err(e) => e,
-            };
+            let mut setup = setup;
+            if setup.direct() {
+                setup.endpoint_id = crate::incoming::web_calling_endpoint(&setup.endpoint_id);
+            }
+            let mut outcome = run(&setup, &rx, call_levels.clone(), call_video.clone(), &report);
+            if matches!(&outcome, Err(e) if e == NO_DEVICE_ANSWER) {
+                // The direct invitation was withdrawn when that attempt ended; ring again the
+                // way that reached every device before.
+                call_log("direct call: no device answered our offer; ringing through a group conversation");
+                setup.group_form = true;
+                outcome = run(&setup, &rx, call_levels, call_video, &report);
+            }
+            let reason = outcome.unwrap_or_else(|e| e);
             still_running.store(false, Ordering::Relaxed);
             report(CallState::Ended(reason));
         })
         .expect("call thread");
     CallHandle { commands: tx, levels, video, running }
 }
+
+/// A direct call that no device of the person answered within `DIRECT_ANSWER_WAIT`: each
+/// ringing device sends its media answer within a second or two.
+const NO_DEVICE_ANSWER: &str = "No device answered the direct call.";
+const DIRECT_ANSWER_WAIT: Duration = Duration::from_secs(7);
 
 /// Owns everything a running call holds, so leaving and closing happen on every exit path.
 struct Live {
@@ -305,6 +321,7 @@ fn run(
     // Its own Trouter endpoint: reusing the app's would replace the incoming-call listener's
     // socket, since Trouter keeps one connection per endpoint id.
     let push = trouter::connect(&setup.trouter, &crate::api::new_uuid())?;
+
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -353,11 +370,15 @@ fn call(
     // Meetings and group calls go through the media processor, which takes source requests
     // only over the data channel.
     let with_data = setup.incoming.is_none() && !setup.direct();
+    // The web client's direct offer has a screen-share section and a data channel too, but
+    // no receive slots.
+    let with_share = setup.incoming.is_none();
     // Which receive slot each SSRC the media processor sends video on belongs to.
     let slot_of: SlotOf = Default::default();
-    let mut media = live.rt.block_on(build_media(relay, state_tx, playback.clone(), codec, with_video.then(|| video.remotes.clone()), slot_of.clone(), video.screen_remote.clone(), video.talking.clone(), with_data))?;
+    let mut media = live.rt.block_on(build_media(relay, state_tx, playback.clone(), codec, with_video.then(|| video.remotes.clone()), slot_of.clone(), video.screen_remote.clone(), video.talking.clone(), with_data, with_share))?;
     let send_limits: crate::video::SendLimits = Default::default();
-    let data_link = media.data.clone().map(|dc| crate::datalink::start(&live.rt, dc, send_limits.clone()));
+    // The data channel speaks to Teams' media processor; in a direct call nothing answers it.
+    let data_link = media.data.clone().filter(|_| with_data).map(|dc| crate::datalink::start(&live.rt, dc, send_limits.clone()));
     let pc = media.pc.clone();
     live.pc = Some(pc.clone());
 
@@ -471,7 +492,9 @@ fn call(
     let sharing_on = Arc::new(AtomicBool::new(false));
     if let Some(track) = media.share.clone() {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        crate::video::encode_screen_loop(video.screen_local.clone(), sharing_on.clone(), tx);
+        // The media processor says how large our shared screen may be, as for the camera.
+        let share_stream = share_slot.as_ref().map(|slot| (send_limits.clone(), slot.stream as u64));
+        crate::video::encode_screen_loop(video.screen_local.clone(), sharing_on.clone(), tx, share_stream);
         live.rt.spawn(send_video(track, media.share_sender.clone(), rx, crate::screen::FPS));
     }
     let mut camera: Option<CameraFeed> = None;
@@ -690,7 +713,7 @@ fn call(
             }
             let _ = push.replies.send(trouter::Reply::Answer(id, 200, Value::Null));
             if pushed.url.contains("/call/mediaRenegotiation/") {
-                match renegotiate(setup, &pushed.body, &pc, &live.rt, &link) {
+                match renegotiate(setup, &pushed.body, &pc, &live.rt, &link, &slot_of, &video.screen_remote) {
                     Ok(()) => call_log("renegotiated media"),
                     Err(e) => call_log(&format!("renegotiation failed: {e}")),
                 }
@@ -791,11 +814,15 @@ fn place_call(
     // Wait for the media answer, answering every other callback with a plain 200. In a direct
     // call each of the person's devices sends its answer as it rings (`call/mediaAnswer`); the
     // acceptance then says which one picked up.
-    let deadline = Instant::now() + if setup.direct() { RING_FOR } else { Duration::from_secs(45) };
+    let invited = Instant::now();
+    let deadline = invited + if setup.direct() { RING_FOR } else { Duration::from_secs(45) };
     let mut device_answers: std::collections::HashMap<String, String> = Default::default();
     loop {
         if let Some(reason) = hang_up_requested(commands, controls) {
             return Ok(Signal::Over(reason));
+        }
+        if setup.direct() && device_answers.is_empty() && invited.elapsed() > DIRECT_ANSWER_WAIT {
+            return Err(NO_DEVICE_ANSWER.into());
         }
         if Instant::now() > deadline {
             if setup.direct() {
@@ -806,6 +833,16 @@ fn place_call(
         let Ok((id, pushed)) = push.incoming.recv_timeout(Duration::from_millis(200)) else { continue };
         if crate::brand::env("CALL_DEBUG").is_some() {
             eprintln!("call: pushed {} {}", pushed.url.rsplit("/callAgent/").next().unwrap_or(""), pushed.body.to_string().chars().take(600).collect::<String>());
+        }
+        // What the person's devices do with a direct invitation, for when none answers it.
+        if setup.direct() {
+            let what = pushed.url.rsplit("/callAgent/").next().and_then(|r| r.split_once('/').map(|(_, rest)| rest)).unwrap_or("");
+            let reason = [&pushed.body["callEnd"], &pushed.body["conversationEnd"], &pushed.body["callRedirection"]]
+                .iter()
+                .find(|v| !v.is_null())
+                .map(|v| v.to_string().chars().take(200).collect::<String>())
+                .unwrap_or_default();
+            call_log(&format!("direct call: {what} {reason}"));
         }
         if pushed.url.contains("/call/mediaAnswer/") {
             let answer = &pushed.body["mediaAnswer"];
@@ -849,6 +886,54 @@ fn place_call(
     }
 }
 
+/// An offer to answer: Teams' media processor's (asked for), or a person's own (direct call).
+enum Requested {
+    Offer((String, String)),
+    Direct((String, String)),
+    Over(String),
+}
+
+/// Asks the media processor for an offer in the web client's dialect and waits for it:
+/// (blob, media leg id).
+#[allow(clippy::too_many_arguments)]
+fn request_offer(
+    setup: &CallSetup,
+    new_offer_url: &str,
+    link: &dyn Fn(&str, &str) -> String,
+    push: &trouter::Connection,
+    commands: &mpsc::Receiver<CallCmd>,
+    controls: &mut Controls,
+    chain_id: &str,
+) -> Result<Requested, String> {
+    let debug = crate::brand::env("CALL_DEBUG").is_some();
+    let wants = json!({"mediaOfferRequirements": {
+        "compatibleContentTypes": ["application/sdp-ngc-1.0"],
+        "links": {"offerReady": link("call", "offerReady")},
+    }});
+    post_json(setup, new_offer_url, &wants, chain_id).map_err(|e| format!("Couldn't answer: {e}"))?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        if let Some(reason) = hang_up_requested(commands, controls) {
+            return Ok(Requested::Over(reason));
+        }
+        if Instant::now() > deadline {
+            return Err("Teams didn't connect the call.".into());
+        }
+        let Ok((id, pushed)) = push.incoming.recv_timeout(Duration::from_millis(200)) else { continue };
+        if debug {
+            eprintln!("call: pushed {} {}", pushed.url.rsplit("/callAgent/").next().unwrap_or(""), pushed.body.to_string().chars().take(300).collect::<String>());
+        }
+        let _ = push.replies.send(trouter::Reply::Answer(id, 200, Value::Null));
+        if let Some(reason) = ended_by_remote(&pushed, &setup.callee_name) {
+            return Ok(Requested::Over(reason));
+        }
+        let content = &pushed.body["mediaOfferReady"]["mediaContent"];
+        if let Some(blob) = content["blob"].as_str() {
+            return Ok(Requested::Offer((blob.to_string(), content["mediaLegId"].as_str().unwrap_or_default().to_string())));
+        }
+    }
+}
+
 /// Incoming: attach to the forked call leg Teams rang us on, ask its media processor for an
 /// offer (it arrives over Trouter at our `offerReady` link), and accept with our answer.
 #[allow(clippy::too_many_arguments)]
@@ -875,35 +960,29 @@ fn accept_incoming(
     }}});
     let attached = post_json(setup, attach_url, &attach, &chain_id).map_err(|e| format!("Couldn't answer: {e}"))?;
     let leg = &attached["callInvitation"]["links"];
-    let (accept_url, new_offer_url) = (leg["acceptance"].as_str().ok_or_else(gone)?, leg["newOffer"].as_str().ok_or_else(gone)?);
-    let wants = json!({"mediaOfferRequirements": {
-        "compatibleContentTypes": ["application/sdp-ngc-1.0"],
-        "links": {"offerReady": link("call", "offerReady")},
-    }});
-    post_json(setup, new_offer_url, &wants, &chain_id).map_err(|e| format!("Couldn't answer: {e}"))?;
-
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let offer = loop {
-        if let Some(reason) = hang_up_requested(commands, controls) {
-            return Ok(Signal::Over(reason));
+    let accept_url = leg["acceptance"].as_str().ok_or_else(gone)?;
+    // A person's direct call carries their own offer, which we answer as the web client does;
+    // otherwise Teams' media processor makes us one when asked.
+    let direct_offer = notice["callNotification"]["mediaContent"]["blob"]
+        .as_str()
+        .filter(|_| notice["conversationInvitation"]["isMultiParty"] == false)
+        .map(|blob| (blob.to_string(), notice["callNotification"]["mediaContent"]["mediaLegId"].as_str().unwrap_or_default().to_string()));
+    let offer = match direct_offer {
+        Some(offer) => {
+            call_log("answering a direct call with the caller's own offer");
+            Requested::Direct(offer)
         }
-        if Instant::now() > deadline {
-            return Err("Teams didn't connect the call.".into());
-        }
-        let Ok((id, pushed)) = push.incoming.recv_timeout(Duration::from_millis(200)) else { continue };
-        if debug {
-            eprintln!("call: pushed {} {}", pushed.url.rsplit("/callAgent/").next().unwrap_or(""), pushed.body.to_string().chars().take(300).collect::<String>());
-        }
-        let _ = push.replies.send(trouter::Reply::Answer(id, 200, Value::Null));
-        if let Some(reason) = ended_by_remote(&pushed, &setup.callee_name) {
-            return Ok(Signal::Over(reason));
-        }
-        let content = &pushed.body["mediaOfferReady"]["mediaContent"];
-        if let Some(blob) = content["blob"].as_str() {
-            break (blob.to_string(), content["mediaLegId"].as_str().unwrap_or_default().to_string());
+        None => {
+            let new_offer_url = leg["newOffer"].as_str().ok_or_else(gone)?;
+            request_offer(setup, new_offer_url, link, push, commands, controls, &chain_id)?
         }
     };
-    let conv = crate::sdp_ngc::offer_from_mp(&offer.0);
+    let (offer, direct) = match offer {
+        Requested::Offer(o) => (o, false),
+        Requested::Direct(o) => (o, true),
+        Requested::Over(reason) => return Ok(Signal::Over(reason)),
+    };
+    let conv = if direct { crate::sdp_ngc::peer_offer(&offer.0) } else { crate::sdp_ngc::offer_from_mp(&offer.0) };
     let answer = rt.block_on(media.local_sdp(Some(conv.sdp.clone())))?;
     if debug {
         eprintln!("call: webrtc answer\n{answer}");
@@ -913,7 +992,7 @@ fn accept_incoming(
         eprintln!("call: our answer\n{ngc_answer}");
     }
     let accept = json!({"callAcceptance": {
-        "acceptedCallModalities": ["audio"],
+        "acceptedCallModalities": if direct { json!(["Audio"]) } else { json!(["audio"]) },
         "links": {
             "mediaRenegotiation": link("call", "mediaRenegotiation"),
             "transfer": link("call", "transfer"),
@@ -1270,21 +1349,53 @@ fn renegotiate(
     pc: &Arc<dyn PeerConnection>,
     rt: &tokio::runtime::Runtime,
     link: &dyn Fn(&str, &str) -> String,
+    slot_of: &SlotOf,
+    screen: &crate::camera::Latest,
 ) -> Result<(), String> {
     let negotiation = &body["mediaNegotiation"];
     let blob = negotiation["mediaContent"]["blob"].as_str().ok_or("no offer in it")?;
     let answer_url = negotiation["links"]["mediaAnswer"].as_str().ok_or("no answer link in it")?;
     let conv = crate::sdp_ngc::peer_offer(blob);
+    // Their shared screen comes on its own section: shown as a share, not as their camera.
+    // When the section is turned off again, the share is over.
+    match (conv.share_ssrc, slot_of.lock()) {
+        (Some(ssrc), Ok(mut map)) => {
+            if map.insert(ssrc, SCREEN_SLOT) != Some(SCREEN_SLOT) {
+                call_log(&format!("their screen share arrives on ssrc {ssrc}"));
+            }
+        }
+        (None, Ok(map)) if map.values().any(|s| *s == SCREEN_SLOT) => {
+            if let Ok(mut f) = screen.lock() {
+                *f = None;
+            }
+        }
+        _ => {}
+    }
     let answer = rt.block_on(async {
         let err = |e: webrtc::error::Error| e.to_string();
         let offer = RTCSessionDescription::offer(conv.sdp.clone()).map_err(err)?;
-        pc.set_remote_description(offer).await.map_err(err)?;
+        if let Err(e) = pc.set_remote_description(offer).await {
+            // Kept for working out what the other side sent (Teams' dialect and our conversion).
+            let dir = crate::brand::cache_dir();
+            let _ = std::fs::write(dir.join("failed-renegotiation.ngc.sdp"), blob);
+            let _ = std::fs::write(dir.join("failed-renegotiation.std.sdp"), &conv.sdp);
+            return Err(err(e));
+        }
         let answer = pc.create_answer(None).await.map_err(err)?;
         pc.set_local_description(answer).await.map_err(err)?;
         pc.local_description().await.map(|d| d.sdp).ok_or_else(|| "no local answer".to_string())
     })?;
+    // What we take part in, as the web client says it: a screen share is only sent to a side
+    // that answers as its viewer.
+    let mut modalities = vec!["Audio"];
+    if conv.sdp.split("\r\nm=").any(|sec| sec.starts_with("video ") && !sec.starts_with("video 0 ") && !sec.contains("a=label:applicationsharing-video")) {
+        modalities.push("Video");
+    }
+    if conv.share_ssrc.is_some() {
+        modalities.push("ScreenViewer");
+    }
     let body = json!({"mediaAnswer": {
-        "callModalities": ["Audio", "Video"],
+        "callModalities": modalities,
         "sender": from_participant(setup),
         "links": {"mediaAcknowledgement": link("call", "mediaAcknowledgement")},
         "clientContentForMediaController": {
@@ -1622,6 +1733,12 @@ fn client_location() -> String {
 
 fn epconv_body(setup: &CallSetup, ngc_offer: &str, link: &dyn Fn(&str, &str) -> String) -> Value {
     let mut body = epconv_template(setup, ngc_offer, link);
+    // The web client's direct call has no media descriptions at all, not even a null one.
+    if setup.direct() {
+        if let Some(mc) = body["callInvitation"]["mediaContent"].as_object_mut() {
+            mc.remove("mediaDescriptions");
+        }
+    }
     if setup.test {
         body["conversationRequest"]["scenario"] = json!("UserInitiatedTestCall");
     }
@@ -1638,10 +1755,10 @@ fn epconv_template(setup: &CallSetup, ngc_offer: &str, link: &dyn Fn(&str, &str)
             "suppressDialout": !setup.direct(),
             "roster": {"type": "Delta", "rosterUpdate": conv("rosterUpdate")},
             "properties": {
-                // Only the Echo test keeps its conversation without us, as the web client's
-                // does. A call to a person ends when we leave, which also withdraws the
-                // invitation if they're still being rung.
-                "allowConversationWithoutHost": setup.test,
+                // The Echo test and a direct call keep the conversation without us, as the web
+                // client's do; a group call to a person ends when we leave, which also
+                // withdraws the invitation if they're still being rung.
+                "allowConversationWithoutHost": setup.test || setup.direct(),
                 "enableGroupCallEventMessages": true,
                 "enableGroupCallUpgradeMessage": false,
                 "enableGroupCallMeetupGeneration": false,
@@ -1942,6 +2059,7 @@ async fn build_media(
     screen: crate::camera::Latest,
     talking: Talking,
     with_data: bool,
+    with_share: bool,
 ) -> Result<Media, String> {
     let err = |e: webrtc::error::Error| format!("Call setup: {e}");
     let mut engine = MediaEngine::default();
@@ -2060,7 +2178,7 @@ async fn build_media(
     // The screen-share section, after the video slots as in the web client's offer. Like the
     // slots it's send-and-receive: others' shared screens arrive here while we don't share.
     let (mut share, mut share_sender) = (None, None);
-    if with_data && video.is_some() {
+    if with_share && video.is_some() {
         let t = Arc::new(
             TrackLocalStaticSample::new(
                 Instant::now(),
@@ -2082,7 +2200,7 @@ async fn build_media(
         share = Some(t);
     }
     // Created before the offer, as the web client does, so the offer carries its section.
-    let data = if with_data { Some(pc.create_data_channel(crate::datalink::LABEL, None).await.map_err(err)?) } else { None };
+    let data = if with_share { Some(pc.create_data_channel(crate::datalink::LABEL, None).await.map_err(err)?) } else { None };
     Ok(Media { pc, track, video, video_sender, data, share, share_sender, gathered })
 }
 
@@ -2329,6 +2447,25 @@ pub fn install_stack_log() {
     }
 }
 
+/// The whole request a direct call to `setup`'s person would send (with its real offer, relay
+/// addresses included), its callback links under `surl`, without calling anyone; for comparing
+/// with the web client's (`notteams --diagnose calldump`).
+pub fn direct_request_for_inspection(mut setup: CallSetup, surl: &str) -> Result<Value, String> {
+    setup.endpoint_id = crate::incoming::web_calling_endpoint(&setup.endpoint_id);
+    let relay = relay_credentials(&setup)?;
+    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().map_err(|e| e.to_string())?;
+    let (states, _states_rx) = mpsc::channel();
+    let feeds = VideoFeeds::default();
+    let agent = crate::api::new_uuid();
+    let link = |kind: &str, name: &str| format!("{surl}callAgent/{agent}/{:08x}/{kind}/{name}/", rand::random::<u32>());
+    rt.block_on(async {
+        let mut media = build_media(relay, states, Default::default(), Codec::Opus, Some(feeds.remotes.clone()), Default::default(), feeds.screen_remote.clone(), feeds.talking.clone(), false, true).await?;
+        let offer = media.local_sdp(None).await?;
+        let _ = media.pc.close().await;
+        Ok(epconv_body(&setup, &crate::sdp_ngc::to_ngc(&offer), &link))
+    })
+}
+
 /// The offer a call to a person sends, in Teams' dialect, for comparing with the web client's
 /// (`notteams --diagnose offer`). Builds the media without calling anyone.
 pub fn direct_offer_for_inspection() -> Result<String, String> {
@@ -2337,7 +2474,7 @@ pub fn direct_offer_for_inspection() -> Result<String, String> {
     let feeds = VideoFeeds::default();
     let relay = RTCIceServer { urls: vec![], ..Default::default() };
     rt.block_on(async {
-        let mut media = build_media(relay, states, Default::default(), Codec::Opus, Some(feeds.remotes.clone()), Default::default(), feeds.screen_remote.clone(), feeds.talking.clone(), false).await?;
+        let mut media = build_media(relay, states, Default::default(), Codec::Opus, Some(feeds.remotes.clone()), Default::default(), feeds.screen_remote.clone(), feeds.talking.clone(), false, true).await?;
         let offer = media.local_sdp(None).await?;
         let _ = media.pc.close().await;
         Ok(crate::sdp_ngc::to_ngc(&offer))

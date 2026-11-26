@@ -25,6 +25,8 @@ pub enum MediaAction {
     OpenLocal(PathBuf),
     /// Add or remove my reaction on a message of the open chat.
     React { message_id: String, key: String, add: bool },
+    /// Scroll the open chat to this message and mark it (a quoted message was clicked).
+    ShowMessage(String),
     /// Start editing / ask to delete one of my messages in the open chat.
     EditMessage { message_id: String },
     DeleteMessage { message_id: String },

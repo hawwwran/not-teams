@@ -112,6 +112,8 @@ impl SettingsUi {
                 ui.add_space(16.0);
                 self.notifications_section(ui);
                 ui.add_space(20.0);
+                self.sounds_section(ui);
+                ui.add_space(20.0);
                 self.list_section(ui);
                 ui.add_space(20.0);
                 self.window_section(ui);
@@ -201,6 +203,13 @@ impl SettingsUi {
                 self.note = Some(e);
             }
         }
+        let mut alert = self.settings.meeting_start_alerts;
+        if ui.checkbox(&mut alert, "Alert me with a sound when a meeting I'm part of starts").changed() {
+            self.settings.meeting_start_alerts = alert;
+            if let Err(e) = self.settings.save() {
+                self.note = Some(e);
+            }
+        }
         let mut shown = self.settings.desktop_notifications;
         if ui.checkbox(&mut shown, "Show desktop notifications for new messages and calls").changed() {
             self.settings.desktop_notifications = shown;
@@ -208,6 +217,41 @@ impl SettingsUi {
                 self.note = Some(e);
             }
         }
+    }
+
+    /// A pick of the six built-in sounds for each event, with a button to hear it.
+    fn sounds_section(&mut self, ui: &mut egui::Ui) {
+        use crate::sounds::{ALL, Event};
+        ui.label(RichText::new("Sounds").font(theme::strong(16.0)));
+        ui.add_space(4.0);
+        let rows = [
+            (Event::Message, "New message"),
+            (Event::Call, "Incoming call"),
+            (Event::MeetingStarted, "Meeting started"),
+        ];
+        egui::Grid::new("sound-choices").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
+            for (event, label) in rows {
+                ui.label(RichText::new(label).color(FG_1));
+                let chosen = self.settings.sounds.tone(event);
+                let mut picked = chosen;
+                egui::ComboBox::from_id_salt(("sound", label)).selected_text(chosen.label()).width(120.0).show_ui(ui, |ui| {
+                    for tone in ALL {
+                        ui.selectable_value(&mut picked, tone, tone.label());
+                    }
+                });
+                if picked != chosen {
+                    *self.settings.sounds.slot(event) = picked;
+                    crate::sounds::play(picked);
+                    if let Err(e) = self.settings.save() {
+                        self.note = Some(e);
+                    }
+                }
+                if ui.button("Play").on_hover_text("Hear this sound").clicked() {
+                    crate::sounds::play(picked);
+                }
+                ui.end_row();
+            }
+        });
     }
 
     fn list_section(&mut self, ui: &mut egui::Ui) {

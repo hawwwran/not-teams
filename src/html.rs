@@ -13,6 +13,55 @@ pub struct Table {
     pub header: bool,
 }
 
+/// A message quoted in a reply (Teams' `<blockquote itemtype="http://schema.skype.com/Reply">`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Quote {
+    /// The quoted message's id.
+    pub message_id: String,
+    pub author: String,
+    pub time_ms: Option<i64>,
+    /// The start of the quoted message, as Teams sends it.
+    pub preview: String,
+}
+
+/// The message's HTML without its reply quotes, and the quotes.
+pub fn with_quotes(html: &str) -> (String, Vec<Quote>) {
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut quotes = Vec::new();
+    let mut at = 0;
+    while let Some(off) = lower[at..].find("<blockquote") {
+        let start = at + off;
+        let Some(end_off) = lower[start..].find("</blockquote>") else { break };
+        let end = start + end_off + "</blockquote>".len();
+        let block = &html[start..end];
+        let open_end = block.find('>').unwrap_or(0);
+        if !block[..open_end].contains("schema.skype.com/Reply") {
+            out.push_str(&html[at..end]);
+            at = end;
+            continue;
+        }
+        out.push_str(&html[at..start]);
+        let inner = |prop: &str| {
+            let key = format!("itemprop=\"{prop}\"");
+            let i = block.find(&key)?;
+            let open = i + block[i..].find('>')? + 1;
+            let close = open + block[open..].find("</")?;
+            Some((block[..i].rfind('<').map(|t| &block[t..open]).unwrap_or(""), to_plain_text(&block[open..close])))
+        };
+        let (time_tag, _) = inner("time").unwrap_or_default();
+        quotes.push(Quote {
+            message_id: attribute(&block[..open_end], "itemid").unwrap_or_default(),
+            author: inner("mri").map(|(_, t)| t).unwrap_or_default(),
+            time_ms: attribute(time_tag, "itemid").and_then(|v| v.parse().ok()),
+            preview: inner("preview").map(|(_, t)| t).unwrap_or_default(),
+        });
+        at = end;
+    }
+    out.push_str(&html[at..]);
+    (out, quotes)
+}
+
 /// The message's text with each table replaced by `TABLE_MARK` on its own line, and the tables.
 pub fn with_tables(html: &str) -> (String, Vec<Table>) {
     let lower = html.to_ascii_lowercase();
@@ -265,6 +314,17 @@ pub fn from_plain_text(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reply_quotes_come_apart() {
+        let html = r#"<blockquote itemscope itemtype="http://schema.skype.com/Reply" itemid="1795610337167"><strong itemprop="mri" itemid="8:orgid:b">Zuzana V</strong><span itemprop="time" itemid="1795610337167"></span><p itemprop="preview">Hele a tohle jsi nekde resil?</p></blockquote>
+<p>Aha, ja uz asi vim</p>"#;
+        let (rest, quotes) = with_quotes(html);
+        assert_eq!(quotes, vec![Quote { message_id: "1795610337167".into(), author: "Zuzana V".into(), time_ms: Some(1795610337167), preview: "Hele a tohle jsi nekde resil?".into() }]);
+        assert_eq!(to_plain_text(&rest), "Aha, ja uz asi vim");
+        let plain = "<blockquote>just a quote</blockquote>";
+        assert_eq!(with_quotes(plain), (plain.to_string(), Vec::new()), "other blockquotes stay");
+    }
 
     #[test]
     fn teams_emoji_stay_pictures_in_messages() {

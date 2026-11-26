@@ -142,7 +142,22 @@ pub fn to_ngc(sdp: &str) -> String {
             out.push(if video { "a=x-signaling-fb:* x-message app send:src recv:src,vc" } else { "a=x-signaling-fb:* x-message app recv:dsh" }.into());
         }
     }
+    unique_foundations(&mut out);
     out.join("\r\n") + "\r\n"
+}
+
+/// Gives every distinct candidate its own foundation, the same one in each section that repeats
+/// it. The WebRTC stack shares one foundation among its public (or relay) candidates from
+/// different local addresses, which ICE doesn't allow; Teams devices then didn't answer the
+/// offer at all (tested 2026-11-24 with a person's phone and desktop).
+fn unique_foundations(lines: &mut [String]) {
+    let mut ids: std::collections::HashMap<String, usize> = Default::default();
+    for line in lines.iter_mut() {
+        let Some(rest) = line.strip_prefix("a=candidate:").and_then(|c| c.split_once(' ')).map(|(_, rest)| rest.to_string()) else { continue };
+        let next = ids.len();
+        let n = *ids.entry(rest.clone()).or_insert(next);
+        *line = format!("a=candidate:{} {rest}", 1000 + n);
+    }
 }
 
 /// The call service's answer → standard SDP a WebRTC stack accepts.
@@ -265,6 +280,9 @@ pub struct OfferConversion {
     pub proto: String,
     /// Sections we can't take (`m=x-data`...), to be declined in the answer with port 0.
     pub declined: Vec<(String, String)>,
+    /// The first SSRC of the other side's screen-share section while it's sending, so its
+    /// video can be shown as a shared screen rather than a camera.
+    pub share_ssrc: Option<u32>,
 }
 
 pub fn offer_from_mp(sdp: &str) -> OfferConversion {
@@ -289,11 +307,23 @@ fn offer_to_std(sdp: &str, keep_video: bool) -> OfferConversion {
             sec.push(l);
         }
     }
-    let mid_of = |sec: &Vec<&str>| sec.iter().find_map(|l| l.strip_prefix("a=mid:")).unwrap_or("").to_string();
+    // A turned-off section (port 0, e.g. the camera while the other side shares its screen)
+    // comes without its `a=mid`; our sections are numbered by position, so it's restored.
+    let mids: Vec<String> = sections
+        .iter()
+        .enumerate()
+        .map(|(n, sec)| sec.iter().find_map(|l| l.strip_prefix("a=mid:")).map(str::to_string).unwrap_or_else(|| n.to_string()))
+        .collect();
+    let port_of = |sec: &Vec<&str>| sec[0].split_whitespace().nth(1).unwrap_or("0").to_string();
+    let share_ssrc = sections
+        .iter()
+        .filter(|sec| port_of(sec) != "0" && sec.iter().any(|l| *l == format!("a=label:{SHARE_LABEL}")))
+        .find_map(|sec| sec.iter().find_map(|l| l.strip_prefix("a=x-ssrc-range:")?.split('-').next()?.parse::<u32>().ok()));
     let mut kept = Vec::new();
+    let mut kept_mids: Vec<String> = Vec::new();
     let mut declined = Vec::new();
     let mut proto = "RTP/AVP".to_string();
-    for sec in &sections {
+    for (n, sec) in sections.iter().enumerate() {
         let m: Vec<&str> = sec[0].split_whitespace().collect();
         let audio = m.first() == Some(&"m=audio");
         if (audio && kept.is_empty()) || (keep_video && m.first() == Some(&"m=video")) {
@@ -301,23 +331,26 @@ fn offer_to_std(sdp: &str, keep_video: bool) -> OfferConversion {
                 proto = m.get(2).unwrap_or(&"RTP/AVP").to_string();
             }
             kept.push(sec.clone());
+            kept_mids.push(mids[n].clone());
         } else {
             let pt = m.get(3).unwrap_or(&"0");
-            declined.push((format!("{} 0 {} {pt}", m[0], m.get(2).unwrap_or(&"RTP/AVP")), mid_of(sec)));
+            declined.push((format!("{} 0 {} {pt}", m[0], m.get(2).unwrap_or(&"RTP/AVP")), mids[n].clone()));
         }
     }
-    let kept_mids: Vec<String> = kept.iter().map(mid_of).collect();
+    // Only sections in use are bundled.
+    let bundled: Vec<String> = kept.iter().zip(&kept_mids).filter(|(sec, _)| port_of(sec) != "0").map(|(_, mid)| mid.clone()).collect();
 
     let mut out = Vec::new();
     for l in &lines[..first_m] {
         if l.starts_with("a=group:BUNDLE") {
-            out.push(format!("a=group:BUNDLE {}", kept_mids.join(" ")));
+            out.push(format!("a=group:BUNDLE {}", bundled.join(" ")));
         } else if !l.starts_with("a=x-") {
             out.push(l.to_string());
         }
     }
-    for sec in &kept {
+    for (sec, mid) in kept.iter().zip(&kept_mids) {
         let has_setup = sec.iter().any(|l| l.starts_with("a=setup:"));
+        let has_mid = sec.iter().any(|l| l.starts_with("a=mid:"));
         for (n, l) in sec.iter().enumerate() {
             if n == 0 {
                 let mut f: Vec<String> = l.split_whitespace().map(str::to_string).collect();
@@ -325,6 +358,9 @@ fn offer_to_std(sdp: &str, keep_video: bool) -> OfferConversion {
                     f[2] = "UDP/TLS/RTP/SAVPF".into();
                 }
                 out.push(f.join(" "));
+                if !has_mid {
+                    out.push(format!("a=mid:{mid}"));
+                }
                 continue;
             }
             if l.starts_with("a=crypto:") || l.starts_with("a=rtcp:") {
@@ -372,6 +408,7 @@ fn offer_to_std(sdp: &str, keep_video: bool) -> OfferConversion {
         sdp: out.join("\r\n") + "\r\n",
         proto,
         declined,
+        share_ssrc,
     }
 }
 
@@ -399,6 +436,37 @@ pub fn answer_to_ngc(std_answer: &str, conv: &OfferConversion) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_share_starting_mid_call_converts() {
+        // A Teams desktop's renegotiation when it starts sharing: its camera section turned
+        // off (port 0, no mid), the screen-share section sending (recorded 2026-11-25).
+        let offer = "v=0\r\no=- 1 2 IN IP4 1.2.3.4\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0 2 3\r\n\
+            m=audio 3480 RTP/SAVP 111\r\na=label:main-audio\r\na=mid:0\r\na=rtpmap:111 opus/48000/2\r\n\
+            m=video 0 RTP/SAVP 34\r\n\
+            m=video 3480 RTP/SAVP 102\r\na=x-ssrc-range:5000-5099\r\na=label:applicationsharing-video\r\na=mid:2\r\na=sendonly\r\na=rtpmap:102 H264/90000\r\n\
+            m=x-data 3480 RTP/SAVP 127\r\na=label:data\r\na=mid:3\r\n";
+        let c = peer_offer(offer);
+        assert!(c.sdp.contains("m=video 0 UDP/TLS/RTP/SAVPF 34\r\na=mid:1\r\n"), "{}", c.sdp);
+        assert!(c.sdp.contains("a=group:BUNDLE 0 2\r\n"), "{}", c.sdp);
+        assert_eq!(c.share_ssrc, Some(5000));
+        let stopped = offer.replace("m=video 3480 RTP/SAVP 102", "m=video 0 RTP/SAVP 102");
+        assert_eq!(peer_offer(&stopped).share_ssrc, None);
+    }
+
+    #[test]
+    fn candidates_get_their_own_foundations() {
+        let offer = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:0\r\n\
+            a=candidate:1484808619 1 udp 1694498815 93.99.216.214 56096 typ srflx raddr 172.17.0.1 rport 56096\r\n\
+            a=candidate:1484808619 1 udp 1694498815 93.99.216.214 58954 typ srflx raddr 192.168.32.135 rport 58954\r\n\
+            m=video 9 UDP/TLS/RTP/SAVPF 107\r\na=mid:1\r\n\
+            a=candidate:1484808619 1 udp 1694498815 93.99.216.214 56096 typ srflx raddr 172.17.0.1 rport 56096\r\n";
+        let ngc = to_ngc(offer);
+        let foundations: Vec<&str> = ngc.lines().filter_map(|l| l.strip_prefix("a=candidate:")?.split(' ').next()).collect();
+        assert_eq!(foundations.len(), 3);
+        assert_ne!(foundations[0], foundations[1], "different candidates, different foundations");
+        assert_eq!(foundations[0], foundations[2], "the same candidate keeps its foundation in every section");
+    }
 
     #[test]
     fn answer_becomes_standard() {

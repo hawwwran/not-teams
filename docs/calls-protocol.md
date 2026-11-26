@@ -413,7 +413,27 @@ Even with those fixed, her devices never sent a media answer to NotTeams' own of
 phone rang regardless, her PC didn't). Calls to a person therefore use the
 conversation-and-add form again, where Teams' media processor makes the offer to her devices,
 as in the calls that rang and connected before; her video comes through source requests on
-the data channel. The direct form stays behind `NOTTEAMS_DIRECT_CALLS=1` for further research.
+the data channel.
+
+**2026-11-24:** the group form shows to the other side as a group call ("meeting"), so calls to
+a person are direct again, with an offer laid out like the web client's 1:1 offer (recorded
+2026-11-18: audio, main video, a screen-share section and an `x-data` data channel, no receive
+slots; `allowConversationWithoutHost: true`, no `mediaDescriptions` key). If no device sends a
+media answer within 7 s (`NO_DEVICE_ANSWER`), the attempt ends (which withdraws the
+invitation) and the call rings again in the group form. `NOTTEAMS_GROUP_CALLS=1` always uses
+the group form.
+
+**Incoming 1:1 call from Teams desktop, recorded at the web client (2026-11-24).** The callee
+gets Trouter `evt` 107 with `gp` (base64 JSON): `callNotification` with the caller, `links`
+(`attach`, `progress`, `reject`, `mediaAnswer: "cc://ma"`), and `mediaContent` with the
+desktop's offer as `application/sdp-ngc-0.5`: only audio and main-video (`recvonly` with the
+camera off), mids `audio_0`/`video_1`, no screen-share or data section, 16 audio codecs.
+`conversationInvitation.isMultiParty: false`. The web callee attaches (`cc/v1/forked/...`),
+reports progress (`cc/v1/incoming/.../progress`), and on pickup accepts with its answer
+(`cc/v1/incoming/...`, then `negotiations`). It sends no early media answer: with
+`mediaAnswer: "cc://ma"` the call controller carries the answer. So extra sections aren't what
+a 1:1 needs; NotTeams' direct call still gets no media answer from any device (19 and 24 Nov).
+
 
 ## Meeting lobby (verified with a guest, 2026-11-19)
 
@@ -441,6 +461,38 @@ the data channel. The direct form stays behind `NOTTEAMS_DIRECT_CALLS=1` for fur
 - Others' video carries the sender's source id as the RTP CSRC. A slot given to someone else
   still delivers the previous person's frames for a moment, so pictures are tagged with it and
   shown only under the person the slot is meant for (`Frame::source`).
+
+**What the web client sends and gets in a meeting (WebRTC stats, 2026-11-24).** Its camera is a
+640×360 (16:9) source sent as simulcast: 320×180 at 15 fps (~180 kbit/s) and 640×360 at 30 fps
+(~800 kbit/s), H.264 through OpenH264; the media processor forwards the layer each viewer
+asked for. Others' cameras arrive at 320×180 for small tiles; a colleague's shared screen
+arrived at 1920×1080, 29 fps. NotTeams sends one 640×360 layer (16:9 since this day) scaled to
+what `vdclc` asks, and shares the screen at up to 1920×1080.
+
+**Why no device answered NotTeams' direct call (found 2026-11-24).** Bisected by placing calls
+from the web client with parts of NotTeams' request swapped in (CDP request interception):
+NotTeams' token, callback links (to a NotTeams Trouter connection) and request fields all
+worked; its real offer didn't. The WebRTC stack gave its public candidates from two local
+addresses one shared foundation, and its relay candidates another; with a foundation per
+candidate (`sdp_ngc::unique_foundations`) the callee's phone and desktop answered at once.
+
+**Their screen share in a direct call (recorded 2026-11-25).** When a Teams desktop starts
+sharing in a 1:1 call it renegotiates: its camera section turned off (`m=video 0 ... 34`, no
+`a=mid`), the `applicationsharing-video` section `sendonly` with its `x-ssrc-range`; stopping
+turns that section off too. `sdp_ngc::peer_offer` now restores a missing mid from the section's
+position, bundles only sections in use, and reports the share's SSRC, which `renegotiate` maps
+to the screen slot (cleared when the share stops). The roster of a 1:1 call doesn't mark the
+sharer, so the stage shows the other person's screen while its picture arrives.
+
+**Direct calls: incoming, and viewing a share (recorded 2026-11-25).** A person's 1:1 call rings
+only endpoints registered the web client's way: appId `SkypeSpacesWeb`, template
+`SkypeSpacesWeb_2.6`, path = the Trouter connection itself (pushes arrive at `.../v4/f/<id>/`
+with `evt` 107 and the notice plain in `gp`; 116 with `cp.correlationId` when it stops). The
+listener registers that besides the desktop-style one (`incoming::web_calling_endpoint`). The
+web callee attaches, reports progress and accepts with an answer to the caller's own offer
+(`sdp-ngc-0.5` from a desktop), no media processor in between. When the other side starts
+sharing, the web client's media answer says `callModalities: ["Audio", "ScreenViewer"]`;
+NotTeams said "Audio, Video", and the share was never sent to it.
 
 ## State in NotTeams
 

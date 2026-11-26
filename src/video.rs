@@ -77,10 +77,15 @@ pub fn encode_loop(latest: Latest, on: Arc<AtomicBool>, out: tokio::sync::mpsc::
     encode_with(latest, on, out, FPS, BITRATE, UsageType::CameraVideoRealTime, limits);
 }
 
-/// The shared screen: fewer frames, more bits for sharp text, and the encoder's screen mode.
-pub fn encode_screen_loop(latest: Latest, on: Arc<AtomicBool>, out: tokio::sync::mpsc::UnboundedSender<Vec<u8>>) {
-    encode_with(latest, on, out, crate::screen::FPS, 1_500_000, UsageType::ScreenContentRealTime, None);
+/// The shared screen: fewer frames, more bits for sharp text, and the encoder's screen mode,
+/// within what the media processor asks of `stream` in `limits`.
+pub fn encode_screen_loop(latest: Latest, on: Arc<AtomicBool>, out: tokio::sync::mpsc::UnboundedSender<Vec<u8>>, limits: Option<(SendLimits, u64)>) {
+    encode_with(latest, on, out, crate::screen::FPS, SCREEN_BITRATE, UsageType::ScreenContentRealTime, limits);
 }
+
+/// The shared screen's bitrate when Teams doesn't say otherwise; it allowed about 3 Mbit/s for
+/// a 1080p share (2026-11-24).
+const SCREEN_BITRATE: u32 = 3_000_000;
 
 /// Lowest bitrate the encoder is set to, whatever is asked: below it the picture falls apart.
 const MIN_BITRATE: u32 = 90_000;
