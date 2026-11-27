@@ -67,6 +67,14 @@
   </content_rating>
 
   <releases>
+    <release version="0.1.2" date="2026-11-27">
+      <description>
+        <ul>
+          <li>Installing from the <code>.flatpakref</code> file on the hwnhub page now gives GNOME Software the app's summary, description, homepage and icon, so the NotTeams page no longer comes up blank on a first install.</li>
+          <li>Screenshots, licence and age rating still appear only after Flatpak's daily catalog refresh. The documentation now explains how to load them straight away: run <code>flatpak update --appstream &lt;remote&gt;</code>, then restart GNOME Software with <code>gnome-software --quit</code>.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-11-27">
       <description>
         <ul>
