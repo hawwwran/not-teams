@@ -28,8 +28,13 @@ impl Filter {
     }
 }
 
-/// Where it happened: "In chat with you", "In <chat>", "<team> › <channel>".
+/// Where it happened: "In chat with you", "In <chat>", "<team> › <channel>"; for a
+/// calendar entry, when the meeting is.
 fn place(a: &Activity, chats: &[Chat]) -> String {
+    if let Some(m) = &a.meeting {
+        let when = m.when();
+        return if when.is_empty() { "Calendar".into() } else { when };
+    }
     if let Some(c) = chats.iter().find(|c| c.id == a.thread_id) {
         return match (&c.team, c.partner.is_some()) {
             (Some(team), _) => format!("{team} › {}", c.title),
@@ -60,7 +65,9 @@ fn badge(ui: &egui::Ui, media: &mut Media, a: &Activity, center: egui::Pos2) {
     }
     p.circle_filled(center, 9.0, BG_1);
     p.circle_filled(center, 7.5, BRAND);
-    let icon = if a.is_mention() || a.is_tag_mention() {
+    let icon = if a.meeting.is_some() {
+        crate::icons::Icon::Calendar
+    } else if a.is_mention() || a.is_tag_mention() {
         crate::icons::Icon::Mention
     } else {
         crate::icons::Icon::Comment

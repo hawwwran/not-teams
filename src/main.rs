@@ -135,6 +135,17 @@ fn diagnose(send: bool, all: bool) {
             }
         }
     }
+    // `activityraw <text>`: the activity description and content of Activity feed entries
+    // whose activity JSON contains <text> (to see how a kind of entry comes).
+    if let Some(needle) = arg_after("activityraw") {
+        if let Ok(v) = t.raw_messages(crate::feed::FEED_ID) {
+            for m in v["messages"].as_array().into_iter().flatten().filter(|m| m.to_string().contains(&needle)).take(2) {
+                println!("{}", serde_json::to_string_pretty(&m["properties"]["activity"]).unwrap_or_default());
+                println!("content: {}", m["content"].as_str().unwrap_or_default());
+                println!("messagetype: {}", m["messagetype"]);
+            }
+        }
+    }
     // `callmsgs <chat>`: the call event messages of a chat, as they come (meeting chats).
     if let Some(chat) = arg_after("callmsgs") {
         if let Ok(v) = t.raw_messages(&chat) {
@@ -552,6 +563,14 @@ fn diagnose(send: bool, all: bool) {
         std::thread::sleep(std::time::Duration::from_secs(2));
         let unread = t.chats().ok().and_then(|c| c.iter().find(|c| c.id == id).map(|c| c.unread));
         println!("readchat: still unread: {unread:?}");
+    }
+    // `calid <text>`: the ids and times of the events in the next 14 days whose subject
+    // contains <text>, to compare with the event ids the Activity feed links to.
+    if let Some(needle) = arg_after("calid") {
+        let today = chrono::Local::now().date_naive();
+        for e in t.calendar(today, 14).unwrap_or_default().into_iter().filter(|e| e.subject.contains(&needle)) {
+            println!("{} {} {}", e.start, e.subject, e.id);
+        }
     }
     // `calendar`: reads this week's calendar and prints only counts and field names (no
     // subjects or people), to check access.

@@ -1522,9 +1522,12 @@ pub(crate) fn urldecode(s: &str) -> String {
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
+        // Hex digits read from the bytes: slicing the str would panic when a `%` is
+        // followed by a multi-byte character.
+        let hex = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
         if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                out.push(v);
+            if let (Some(hi), Some(lo)) = (hex(b[i + 1]), hex(b[i + 2])) {
+                out.push(hi * 16 + lo);
                 i += 3;
                 continue;
             }

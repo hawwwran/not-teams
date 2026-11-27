@@ -74,7 +74,7 @@ pub fn spawn(ctx: eframe::egui::Context) -> Worker {
                 }
                 Command::FetchPicture { mri } => emit(Event::Picture { mri, result: Ok(None) }),
                 Command::LoadPresence { .. } => emit(Event::Presence(presence())),
-                Command::LoadActivity => emit(Event::Activity(Ok(Vec::new()))),
+                Command::LoadActivity => emit(Event::Activity(Ok(activity()))),
                 Command::LoadCalendar { from, days } => {
                     use chrono::Datelike;
                     let monday = from - chrono::Duration::days(from.weekday().num_days_from_monday() as i64);
@@ -160,6 +160,41 @@ fn chats() -> Vec<Chat> {
         chat("19:demo-lena@unq.gbl.spaces", "Lena Hoffmann", "Happy to help with the translations", 4 * 24 * 60, false, Some("8:orgid:demo-lena")),
         channel_chat("19:demo-design-general@thread.tacv2", "Design", "General", "Lena: New icon set is ready for review", 90),
         channel_chat("19:demo-eng-general@thread.tacv2", "Engineering", "General", "Jonas: Maintenance window on Saturday 06:00", 5 * 60),
+    ]
+}
+
+/// The Activity feed: an invitation to the sample week's 1:1, a reaction and a reply.
+fn activity() -> Vec<crate::feed::Activity> {
+    use chrono::{Datelike, TimeZone};
+    let today = chrono::Local::now().date_naive();
+    let monday = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+    let at = |h: u32, m: u32| chrono::Local.from_local_datetime(&(monday + chrono::Duration::days(2)).and_hms_opt(h, m, 0).unwrap_or_default()).earliest();
+    let entry = |n: usize, kind: &str, subtype: &str, who: &str, preview: &str, minutes: i64| crate::feed::Activity {
+        id: format!("demo-activity-{n}"),
+        kind: kind.into(),
+        subtype: subtype.into(),
+        time_ms: ago(minutes),
+        read: n > 0,
+        user_mri: who.into(),
+        user_name: name_of(who).into(),
+        count: 1,
+        raw_count: 0,
+        thread_id: if kind == "msGraph" { String::new() } else { OPEN.into() },
+        thread_type: if kind == "msGraph" { String::new() } else { "chat".into() },
+        thread_topic: String::new(),
+        roster_count: 2,
+        reply_chain_id: String::new(),
+        preview: preview.into(),
+        group_title: String::new(),
+        parent_subject: String::new(),
+        meeting: None,
+    };
+    let mut invite = entry(0, "msGraph", "privateMeetingCreated", "8:orgid:demo-jonas", "1:1", 12);
+    invite.meeting = Some(crate::feed::MeetingRef { event_id: "one".into(), title: "1:1".into(), start: at(14, 0), end: at(14, 30), all_day: false });
+    vec![
+        invite,
+        entry(1, "reactionInChat", "like", "8:orgid:demo-maya", "Good catch, I'll merge those into one field.", 40),
+        entry(2, "reply", "", "8:orgid:demo-priya", "Thanks, that helps a lot!", 3 * 60),
     ]
 }
 

@@ -70,6 +70,8 @@ pub struct TeamsApp {
     /// Unicorn mode's animations (sparkles, the galloping unicorn).
     unicorn: crate::unicorn::Unicorn,
     unicorn_forced: bool,
+    /// The OPEN_ACTIVITY dev switch has been applied.
+    open_activity_done: bool,
     /// Our own window controls, while unicorn mode hides the desktop's title bar.
     chrome: crate::chrome::Chrome,
     call_note: Option<(String, crate::notify::CallNote)>,
@@ -271,6 +273,7 @@ impl TeamsApp {
             call: Default::default(),
             notes: std::sync::mpsc::channel(),
             unicorn: Default::default(),
+            open_activity_done: false,
             chrome: Default::default(),
             // UNICORN: unicorn mode for this run only (never saved), for screenshots of it.
             unicorn_forced: crate::brand::env("UNICORN").is_some(),
@@ -439,6 +442,16 @@ impl TeamsApp {
                     match result {
                         Ok(items) => self.feed = items,
                         Err(e) => eprintln!("activity: {e}"),
+                    }
+                    // OPEN_ACTIVITY: start on Activity; with a number, open that entry as a
+                    // click would (which also marks it read in Teams), for screenshots.
+                    // Nobody sets it in normal use.
+                    if let Some(wanted) = crate::brand::env("OPEN_ACTIVITY").filter(|_| !self.open_activity_done) {
+                        self.open_activity_done = true;
+                        self.view = View::Activity;
+                        if let Ok(n) = wanted.parse::<usize>() {
+                            self.open_activity(n);
+                        }
                     }
                 }
                 Event::People { query, result } => {
@@ -1948,42 +1961,54 @@ impl TeamsApp {
                 );
             });
         if let Some(i) = clicked {
-            let a = self.feed[i].clone();
-            if !a.read {
-                self.feed[i].read = true;
-                self.send(Command::MarkActivityRead { id: a.id.clone() });
-            }
-            if a.thread_id.is_empty() {
-                return;
-            }
-            // A thread the list doesn't have (a hidden channel, an old chat) still opens.
-            if !self.chats.iter().any(|c| c.id == a.thread_id) {
-                let title = if a.thread_type == "chat" && a.roster_count <= 2 {
-                    a.user_name.clone()
-                } else if !a.thread_topic.is_empty() {
-                    a.thread_topic.clone()
-                } else {
-                    a.group_title.clone()
-                };
-                let chat = Chat {
-                    id: a.thread_id.clone(),
-                    title,
-                    preview: String::new(),
-                    last_time_ms: Some(a.time_ms),
-                    unread: false,
-                    partner: (a.thread_type == "chat" && a.roster_count <= 2).then(|| a.user_mri.clone()),
-                    team: None,
-                    team_id: None,
-                    shown_in_teams: false,
-                    meetup: None,
-                };
-                self.local_chats.push(chat.clone());
-                self.chats.push(chat);
-            }
-            self.new_chat = None;
-            self.channel_config = None;
-            self.select(&a.thread_id);
+            self.open_activity(i);
         }
+    }
+
+    /// What clicking an Activity entry does: marks it read and opens where it happened, a
+    /// chat or channel, or for a calendar entry its meeting in the calendar.
+    fn open_activity(&mut self, i: usize) {
+        let Some(a) = self.feed.get(i).cloned() else { return };
+        if !a.read {
+            self.feed[i].read = true;
+            self.send(Command::MarkActivityRead { id: a.id.clone() });
+        }
+        // A calendar entry opens its meeting in the calendar.
+        if let Some(meeting) = &a.meeting {
+            self.calendar.focus(meeting);
+            self.view = View::Calendar;
+            return;
+        }
+        if a.thread_id.is_empty() {
+            return;
+        }
+        // A thread the list doesn't have (a hidden channel, an old chat) still opens.
+        if !self.chats.iter().any(|c| c.id == a.thread_id) {
+            let title = if a.thread_type == "chat" && a.roster_count <= 2 {
+                a.user_name.clone()
+            } else if !a.thread_topic.is_empty() {
+                a.thread_topic.clone()
+            } else {
+                a.group_title.clone()
+            };
+            let chat = Chat {
+                id: a.thread_id.clone(),
+                title,
+                preview: String::new(),
+                last_time_ms: Some(a.time_ms),
+                unread: false,
+                partner: (a.thread_type == "chat" && a.roster_count <= 2).then(|| a.user_mri.clone()),
+                team: None,
+                team_id: None,
+                shown_in_teams: false,
+                meetup: None,
+            };
+            self.local_chats.push(chat.clone());
+            self.chats.push(chat);
+        }
+        self.new_chat = None;
+        self.channel_config = None;
+        self.select(&a.thread_id);
     }
 
     fn chat_list(&mut self, ctx: &egui::Context) {

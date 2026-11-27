@@ -124,6 +124,35 @@ pub struct CalendarUi {
     saving: bool,
     /// An event whose deletion waits for a second click.
     confirm_delete: Option<String>,
+    /// A meeting to open once its week is loaded and drawn (from an Activity entry).
+    focus: Option<Focus>,
+    /// The hour the grid scrolls to when it's shown.
+    scroll_hour: f32,
+}
+
+/// The meeting an Activity entry points at, to find among the loaded events.
+struct Focus {
+    event_id: String,
+    start: Option<chrono::DateTime<Local>>,
+    title: String,
+    all_day: bool,
+    /// Replies to loads sent before the focus, still to come (the worker answers in
+    /// order): they may predate the meeting, so they can't tell it's missing.
+    stale_replies: u32,
+}
+
+impl Focus {
+    /// The feed's event id and the calendar's may differ in encoding (`/+` against `-_`), so
+    /// they're compared normalised, and a meeting with the same start and title counts too.
+    fn matches(&self, e: &CalendarEvent) -> bool {
+        let norm = |id: &str| id.replace('-', "/").replace('_', "+");
+        let same_time = match self.start {
+            Some(start) if self.all_day => e.all_day && start.date_naive() == e.start.date_naive(),
+            Some(start) => start == e.start,
+            None => false,
+        };
+        (!self.event_id.is_empty() && norm(&self.event_id) == norm(&e.id)) || (same_time && self.title == e.subject)
+    }
 }
 
 impl Default for CalendarUi {
@@ -140,6 +169,8 @@ impl Default for CalendarUi {
             form: None,
             saving: false,
             confirm_delete: None,
+            focus: None,
+            scroll_hour: 8.0,
         }
     }
 }
@@ -158,6 +189,33 @@ impl CalendarUi {
     /// Opens an event's card as if it had been clicked (for checking the card's look).
     pub fn open_card(&mut self, id: &str) {
         self.selected = Some((id.to_string(), egui::Rect::from_min_size(egui::pos2(420.0, 300.0), Vec2::new(240.0, 60.0))));
+    }
+
+    /// Shows the week of a meeting from the Activity feed, scrolled to it, and opens its card
+    /// once its events are loaded.
+    pub fn focus(&mut self, meeting: &crate::feed::MeetingRef) {
+        if let Some(start) = meeting.start {
+            self.anchor = start.date_naive();
+            if self.mode == Mode::WorkWeek && start.weekday().num_days_from_monday() >= 5 {
+                self.mode = Mode::Week;
+            }
+            // An all-day meeting sits above the hours; the grid keeps its usual morning.
+            self.scroll_hour = if meeting.all_day { 8.0 } else { (start.hour() as f32 - 1.0).max(0.0) };
+            self.scrolled = false;
+        }
+        self.selected = None;
+        self.form = None;
+        // Read the week again: the entry may be about a meeting made or moved just now.
+        let stale_replies = u32::from(self.loading.is_some());
+        self.loaded = None;
+        self.loading = None;
+        self.focus = Some(Focus {
+            event_id: meeting.event_id.clone(),
+            start: meeting.start,
+            title: meeting.title.clone(),
+            all_day: meeting.all_day,
+            stale_replies,
+        });
     }
 
     /// Opens the "New event" form at the next half hour.
@@ -191,6 +249,16 @@ impl CalendarUi {
         }
         match result {
             Ok(events) => {
+                // A meeting asked for that isn't in its freshly read week (cancelled, moved)
+                // opens nothing.
+                let range = self.range();
+                if let Some(f) = self.focus.as_mut() {
+                    if f.stale_replies > 0 {
+                        f.stale_replies -= 1;
+                    } else if range == (from, days) && !events.iter().any(|e| f.matches(e)) {
+                        self.focus = None;
+                    }
+                }
                 self.events = events;
                 self.error = None;
                 self.loaded = Some((from, days, Instant::now()));
@@ -234,7 +302,7 @@ impl CalendarUi {
             ui.painter().hline(ui.max_rect().x_range(), line, Stroke::new(1.0_f32, STROKE_2));
             let mut scroll = egui::ScrollArea::vertical().id_salt("calendar-grid").auto_shrink([false, false]);
             if !self.scrolled {
-                scroll = scroll.vertical_scroll_offset(8.0 * HOUR_H - 8.0);
+                scroll = scroll.vertical_scroll_offset(self.scroll_hour * HOUR_H - 8.0);
                 self.scrolled = true;
             }
             scroll.show(ui, |ui| {
@@ -253,8 +321,12 @@ impl CalendarUi {
                 for (i, date) in dates.iter().enumerate() {
                     let col = egui::Rect::from_min_size(grid.min + Vec2::new(GUTTER + col_w * i as f32, 0.0), Vec2::new(col_w, grid.height()));
                     for (event, rect) in layout_day(&events, *date, col) {
-                        if paint_event(ui, event, rect) {
+                        let asked = self.focus.as_ref().is_some_and(|f| f.stale_replies == 0 && f.matches(event));
+                        if paint_event(ui, event, rect) || asked {
                             self.selected = Some((event.id.clone(), rect));
+                            if asked {
+                                self.focus = None;
+                            }
                         }
                     }
                 }
@@ -420,8 +492,12 @@ impl CalendarUi {
                     egui::pos2(strip.left() + GUTTER + col_w * i as f32 + 2.0, strip.top() + 3.0 + row as f32 * 24.0),
                     Vec2::new(col_w - 4.0, 21.0),
                 );
-                if paint_event(ui, e, rect) {
+                let asked = self.focus.as_ref().is_some_and(|f| f.stale_replies == 0 && f.matches(e));
+                if paint_event(ui, e, rect) || asked {
                     self.selected = Some((e.id.clone(), rect));
+                    if asked {
+                        self.focus = None;
+                    }
                 }
             }
         }
