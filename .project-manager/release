@@ -167,6 +167,23 @@ Path(metainfo).write_text(text.replace("<releases>\n", "<releases>\n" + entry, 1
 PY
 }
 
+# Signing with --gpg-sign starts a gpg-agent inside org.flatpak.Builder's sandbox (the
+# host's agent socket isn't visible there). That agent keeps the sandbox alive after the
+# build, and the sandbox holds this script's output open, so Project Manager would wait on
+# a finished release forever (2026-11-27, v0.1.0). Ending the builder's sandbox ends it.
+# Instance ids of the org.flatpak.Builder sandboxes running now.
+builder_instances() {
+    flatpak ps --columns=instance,application 2>/dev/null | awk '$2 == "org.flatpak.Builder" { print $1 }' || true
+}
+
+# Ends only the builder sandboxes this release started, not a build running beside it.
+stop_builder_sandbox() {
+    local id
+    for id in $(builder_instances); do
+        grep -qxF "$id" <<<"${builders_before:-}" || flatpak kill "$id" >/dev/null 2>&1 || true
+    done
+}
+
 # Builds the Flatpak from the clone and commits it, signed, to gh-pages of a fresh hwnhub
 # clone in the work folder. Nothing leaves the machine here.
 build_into_channel() {
@@ -176,11 +193,20 @@ build_into_channel() {
     git clone --quiet "https://github.com/$HWNHUB_REPO.git" "$hub"
 
     echo "::step Building and signing the Flatpak"
+    local built=0
+    builders_before=$(builder_instances)
+    # Also on Cancel, which sends SIGTERM: an agent left behind would hang that run too.
+    trap stop_builder_sandbox EXIT
+    trap 'exit 143' TERM
     # publish.sh leaves flatpak-builder's cache in the folder it is started from.
-    if ! (cd "$PM_WORK_DIR" && "$hub/publish.sh" \
-            --source-dir "$PM_SOURCE_DIR" --manifest "$MANIFEST" \
-            --app-id "$APP_ID" --app-name "$APP_NAME" \
-            --version "$PM_VERSION" --gpg-key "$HWNHUB_KEY"); then
+    (cd "$PM_WORK_DIR" && "$hub/publish.sh" \
+        --source-dir "$PM_SOURCE_DIR" --manifest "$MANIFEST" \
+        --app-id "$APP_ID" --app-name "$APP_NAME" \
+        --version "$PM_VERSION" --gpg-key "$HWNHUB_KEY") || built=$?
+    stop_builder_sandbox
+    # Disarmed now: at the script's end a parallel release may have a builder of its own.
+    trap - EXIT TERM
+    if [ "$built" != 0 ]; then
         echo "::fail Building the Flatpak failed; nothing was pushed"
         exit 1
     fi
