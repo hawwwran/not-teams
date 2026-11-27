@@ -49,5 +49,32 @@
   </content_rating>
 
   <releases>
+    <release version="0.1.0" date="2026-11-27">
+      <description>
+        <ul>
+          <li>Sign in with your Microsoft account by entering a short code on Microsoft's sign-in page. NotTeams keeps you signed in until you sign out.</li>
+          <li>Chats and channels, kept up to date, with a setting for which teams and channels the list shows</li>
+          <li>Read, send, edit and delete messages, and reply to channel posts. Quoted replies are shown apart from the message text.</li>
+          <li>Pictures and files are shown in chats and can be opened with your own apps or saved to Downloads. Send them with the paperclip or by dropping them onto the window.</li>
+          <li>Reactions on messages</li>
+          <li>Start a one-to-one chat by searching for a person's name or email</li>
+          <li>Search messages across all chats and channels (Ctrl+E or Ctrl+Alt+E)</li>
+          <li>Activity feed with reactions, replies, mentions and new posts in channels you follow</li>
+          <li>Presence: photos and status dots for everyone, and you can set your own status and status message. You show as Away after 5 minutes without input, unless "Always available" is on.</li>
+          <li>Calendar of your meetings: reply Accept, Tentative or Decline, join Teams meetings, and add or delete events</li>
+          <li>One-to-one audio and video calls from a chat. Incoming calls ring with an Accept/Decline card, also while NotTeams is in the tray.</li>
+          <li>Teams meetings with a pre-join screen (camera preview, microphone meter, device choice), raised hands, reactions, pinning a participant to the big tile and admitting people from the lobby</li>
+          <li>Screen sharing, and the other person's shared screen is shown in one-to-one calls</li>
+          <li>Background blur for your camera</li>
+          <li>Choose the microphone, speaker and camera in Settings → Calls or during a call. A test call to Teams' Echo service lets you check your microphone and speaker.</li>
+          <li>An alert with sound when a meeting starts in one of your chats</li>
+          <li>Sounds for new messages, incoming calls and meeting starts, each chosen in Settings from six built-in sounds</li>
+          <li>Tray icon with a count of new messages and activity. Closing the window keeps NotTeams running in the tray.</li>
+          <li>Video in calls uses Cisco's OpenH264 codec, which NotTeams downloads from Cisco on first start. You can turn it off in Settings → Calls, and calls then have no video.</li>
+          <li>Settings for how long downloaded pictures and files are kept, and for clearing them</li>
+          <li>Available as a Flatpak from the hwnhub channel, updated through GNOME Software or <code>flatpak update</code></li>
+        </ul>
+      </description>
+    </release>
   </releases>
 </component>
