@@ -67,6 +67,13 @@
   </content_rating>
 
   <releases>
+    <release version="0.1.1" date="2026-11-27">
+      <description>
+        <ul>
+          <li>The app's listing in GNOME Software now has screenshots of the chat and calendar views and a longer description of what NotTeams does.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-27">
       <description>
         <ul>
