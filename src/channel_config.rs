@@ -54,14 +54,14 @@ fn header(ui: &mut egui::Ui, title: &str, back: bool) -> Outcome {
         });
     });
     let r = ui.max_rect();
-    ui.painter().hline(r.x_range(), ui.cursor().top(), Stroke::new(1.0, STROKE_2));
+    ui.painter().hline(r.x_range(), ui.cursor().top(), Stroke::new(1.0_f32, STROKE_2));
     outcome
 }
 
 fn row(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
     Frame::new()
         .fill(BG_1)
-        .stroke(Stroke::new(1.0, STROKE_2))
+        .stroke(Stroke::new(1.0_f32, STROKE_2))
         .corner_radius(CornerRadius::same(RADIUS))
         .inner_margin(Margin::symmetric(12, 8))
         .show(ui, |ui| {

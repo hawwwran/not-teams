@@ -164,7 +164,7 @@ impl CallUi {
             .show_separator_line(false)
             .show(ctx, |ui| {
                 let bar = ui.max_rect();
-                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, STROKE_2));
+                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0_f32, STROKE_2));
                 ui.horizontal_centered(|ui| {
                     let ended = matches!(state, CallState::Ended(_));
                     icons::show(ui, if ended { Icon::CallEnd } else { Icon::Call }, 20.0, if ended { FG_3 } else { BRAND });
@@ -395,7 +395,7 @@ pub(crate) fn round_button(ui: &mut egui::Ui, icon: Icon, on: bool) -> egui::Res
     };
     ui.painter().circle_filled(rect.center(), 16.0, bg);
     if on {
-        ui.painter().circle_stroke(rect.center(), 15.5, Stroke::new(1.0, STROKE_1));
+        ui.painter().circle_stroke(rect.center(), 15.5, Stroke::new(1.0_f32, STROKE_1));
     }
     icons::paint(ui, egui::Rect::from_center_size(rect.center(), Vec2::splat(20.0)), icon, if on { FG_ERROR } else { FG_2 });
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -423,7 +423,7 @@ pub fn call_button(ui: &mut egui::Ui, enabled: bool, icon_kind: Icon, text: &str
     let colour = if enabled { if resp.hovered() { BRAND } else { FG_1 } } else { FG_4 };
     let p = ui.painter();
     p.rect_filled(rect, CornerRadius::same(RADIUS), if enabled && resp.hovered() { BG_4 } else { BG_1 });
-    p.rect_stroke(rect, CornerRadius::same(RADIUS), Stroke::new(1.0, STROKE_1), egui::StrokeKind::Inside);
+    p.rect_stroke(rect, CornerRadius::same(RADIUS), Stroke::new(1.0_f32, STROKE_1), egui::StrokeKind::Inside);
     let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 20.0, rect.center().y), Vec2::splat(20.0));
     icons::paint(ui, icon, icon_kind, colour);
     p.galley(egui::pos2(rect.left() + 36.0, rect.center().y - galley.size().y / 2.0), galley, colour);
@@ -459,7 +459,7 @@ impl CallUi {
             .show(ctx, |ui| {
                 Frame::new()
                     .fill(BG_1)
-                    .stroke(Stroke::new(1.0, STROKE_2))
+                    .stroke(Stroke::new(1.0_f32, STROKE_2))
                     .corner_radius(CornerRadius::same(RADIUS_L))
                     .shadow(egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: egui::Color32::from_black_alpha(40) })
                     .inner_margin(Margin::same(16))
@@ -654,7 +654,7 @@ impl CallUi {
             .show_separator_line(false)
             .show(ctx, |ui| {
                 let bar = ui.max_rect();
-                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, STROKE_2));
+                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0_f32, STROKE_2));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if pill_button(ui, Icon::Video, "Show call", BRAND, BRAND_PRESSED).clicked() {
                         self.stage = true;
@@ -1316,7 +1316,7 @@ fn paint_calling(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, tile: &T
         let phase = (t / 1.8 + k as f32 / 3.0).fract();
         let radius = d / 2.0 + 6.0 + phase * d * 0.55;
         let alpha = ((1.0 - phase) * 160.0) as u8;
-        p.circle_stroke(center, radius, Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(0x7F, 0x85, 0xF5, alpha)));
+        p.circle_stroke(center, radius, Stroke::new(2.0_f32, egui::Color32::from_rgba_unmultiplied(0x7F, 0x85, 0xF5, alpha)));
     }
     let at = egui::Rect::from_center_size(center, Vec2::splat(d));
     crate::people_ui::paint_avatar(ui, media, at, &tile.name, tile.mri.as_deref(), false, TILE_BG);
@@ -1466,17 +1466,17 @@ fn paint_tile(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, tile: &Tile
             let d = (rect.height() * 0.4).clamp(28.0, 120.0);
             let at = egui::Rect::from_center_size(rect.center() - Vec2::new(0.0, 8.0), Vec2::splat(d));
             if tile.talking {
-                p.circle_stroke(at.center(), d / 2.0 + 5.0, Stroke::new(3.0, BRAND));
+                p.circle_stroke(at.center(), d / 2.0 + 5.0, Stroke::new(3.0_f32, BRAND));
             }
             crate::people_ui::paint_avatar(ui, media, at, &tile.name, tile.mri.as_deref(), false, TILE_BG);
         }
     }
     if tile.talking {
-        p.rect_stroke(rect.shrink(1.5), CornerRadius::same(RADIUS_L), Stroke::new(3.0, BRAND), egui::StrokeKind::Inside);
+        p.rect_stroke(rect.shrink(1.5), CornerRadius::same(RADIUS_L), Stroke::new(3.0_f32, BRAND), egui::StrokeKind::Inside);
     }
     if tile.hand {
         // A raised hand: a yellow frame and a hand badge in the corner, as Teams marks it.
-        p.rect_stroke(rect.shrink(1.5), CornerRadius::same(RADIUS_L), Stroke::new(3.0, HAND_YELLOW), egui::StrokeKind::Inside);
+        p.rect_stroke(rect.shrink(1.5), CornerRadius::same(RADIUS_L), Stroke::new(3.0_f32, HAND_YELLOW), egui::StrokeKind::Inside);
         let badge = egui::Rect::from_min_size(rect.left_top() + Vec2::splat(10.0), Vec2::splat(32.0));
         p.circle_filled(badge.center(), 16.0, HAND_YELLOW);
         icons::paint(ui, badge.shrink(6.0), Icon::Hand, FG_1);

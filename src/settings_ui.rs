@@ -409,7 +409,7 @@ impl SettingsUi {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let clear = egui::Button::new(RichText::new("Clear now").color(FG_1))
                             .fill(BG_1)
-                            .stroke(Stroke::new(1.0, STROKE_1))
+                            .stroke(Stroke::new(1.0_f32, STROKE_1))
                             .corner_radius(CornerRadius::same(RADIUS));
                         if ui.add_enabled(self.usage.is_some_and(|u| u.files > 0), clear).clicked() {
                             let removed = settings::clear();

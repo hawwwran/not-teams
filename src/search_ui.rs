@@ -35,7 +35,7 @@ pub fn panel(ctx: &egui::Context, search: &Search, media: &mut Media, chats: &[C
         .frame(egui::Frame::new().fill(LIST_BG))
         .show(ctx, |ui| {
             let panel = ui.max_rect();
-            ui.painter().vline(panel.right() - 0.5, panel.y_range(), egui::Stroke::new(1.0, STROKE_2));
+            ui.painter().vline(panel.right() - 0.5, panel.y_range(), egui::Stroke::new(1.0_f32, STROKE_2));
             egui::Frame::new().inner_margin(egui::Margin { left: 20, right: 12, top: 14, bottom: 4 }).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Messages").font(theme::strong(20.0)));

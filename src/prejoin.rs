@@ -152,7 +152,7 @@ impl PreJoin {
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .fill(BG_1)
-                    .stroke(Stroke::new(1.0, STROKE_2))
+                    .stroke(Stroke::new(1.0_f32, STROKE_2))
                     .corner_radius(CornerRadius::same(RADIUS_L))
                     .shadow(egui::Shadow { offset: [0, 6], blur: 24, spread: 0, color: egui::Color32::from_black_alpha(60) })
                     .inner_margin(Margin::same(20))

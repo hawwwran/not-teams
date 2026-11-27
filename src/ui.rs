@@ -1054,7 +1054,7 @@ impl TeamsApp {
             painter.rect_stroke(
                 rect.shrink(12.0),
                 CornerRadius::same(RADIUS_L),
-                Stroke::new(2.0, BRAND),
+                Stroke::new(2.0_f32, BRAND),
                 egui::StrokeKind::Inside,
             );
             painter.text(
@@ -1173,7 +1173,7 @@ fn secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     ui.add(
         egui::Button::new(text)
             .fill(BG_1)
-            .stroke(Stroke::new(1.0, STROKE_1))
+            .stroke(Stroke::new(1.0_f32, STROKE_1))
             .corner_radius(CornerRadius::same(RADIUS))
             .min_size(Vec2::new(96.0, 32.0)),
     )
@@ -1183,7 +1183,7 @@ fn error_banner(ui: &mut egui::Ui, error: &mut Option<String>) {
     let Some(text) = error.clone() else { return };
     Frame::new()
         .fill(BG_ERROR)
-        .stroke(Stroke::new(1.0, hex_stroke_error()))
+        .stroke(Stroke::new(1.0_f32, hex_stroke_error()))
         .corner_radius(CornerRadius::same(RADIUS))
         .inner_margin(Margin::symmetric(12, 8))
         .show(ui, |ui| {
@@ -1268,7 +1268,7 @@ impl TeamsApp {
                     Frame::new()
                         .fill(BG_1)
                         .corner_radius(CornerRadius::same(RADIUS_L))
-                        .stroke(Stroke::new(1.0, STROKE_2))
+                        .stroke(Stroke::new(1.0_f32, STROKE_2))
                         .shadow(egui::Shadow {
                             offset: [0, 2],
                             blur: 8,
@@ -1526,7 +1526,7 @@ impl TeamsApp {
             .show(ctx, |ui| {
                 Frame::new()
                     .fill(BG_1)
-                    .stroke(Stroke::new(2.0, BRAND))
+                    .stroke(Stroke::new(2.0_f32, BRAND))
                     .corner_radius(CornerRadius::same(RADIUS_L))
                     .shadow(egui::Shadow { offset: [0, 8], blur: 28, spread: 0, color: Color32::from_black_alpha(70) })
                     .inner_margin(Margin::same(22))
@@ -1656,7 +1656,7 @@ impl TeamsApp {
             .show_separator_line(false)
             .show(ctx, |ui| {
                 let bar = ui.max_rect();
-                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, STROKE_2));
+                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0_f32, STROKE_2));
                 ui.horizontal_centered(|ui| {
                     logo(ui);
                     let search_w = (ui.available_width() - 120.0).clamp(160.0, 680.0);
@@ -1864,7 +1864,7 @@ impl TeamsApp {
             .frame(Frame::new().fill(LIST_BG))
             .show(ctx, |ui| {
                 let panel = ui.max_rect();
-                ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0, STROKE_2));
+                ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0_f32, STROKE_2));
                 Frame::new()
                     .inner_margin(Margin { left: 20, right: 12, top: 14, bottom: 10 })
                     .show(ui, |ui| {
@@ -1929,7 +1929,7 @@ impl TeamsApp {
             .frame(Frame::new().fill(LIST_BG))
             .show(ctx, |ui| {
                 let panel = ui.max_rect();
-                ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0, STROKE_2));
+                ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0_f32, STROKE_2));
                 Frame::new()
                     .inner_margin(Margin {
                         left: 20,
@@ -2236,7 +2236,7 @@ impl TeamsApp {
                 ui.painter().hline(
                     line.x_range(),
                     ui.cursor().top(),
-                    Stroke::new(1.0, STROKE_2),
+                    Stroke::new(1.0_f32, STROKE_2),
                 );
 
                 if let Some(err) = self.error.as_ref() {
@@ -2574,7 +2574,7 @@ impl TeamsApp {
                 let frame = Frame::new()
                     .fill(BG_1)
                     .corner_radius(CornerRadius::same(RADIUS))
-                    .stroke(Stroke::new(1.0, STROKE_2))
+                    .stroke(Stroke::new(1.0_f32, STROKE_2))
                     .inner_margin(Margin::symmetric(12, 10));
                 let pending = self.pending.entry(chat_id.to_string()).or_default();
                 let media = &mut self.media;
@@ -2628,7 +2628,7 @@ impl TeamsApp {
                     ui.painter().hline(
                         r.x_range().shrink(2.0),
                         r.bottom() - 1.0,
-                        Stroke::new(2.0, BRAND),
+                        Stroke::new(2.0_f32, BRAND),
                     );
                 }
                 if pick_files {
@@ -2741,7 +2741,7 @@ fn rail_item(
         let w = (g.size().x + 8.0).max(16.0);
         let c = rect.center() + Vec2::new(12.0, -16.0);
         let pill = egui::Rect::from_center_size(c, Vec2::new(w, 16.0));
-        p.rect(pill, CornerRadius::same(8), UNREAD_RED, Stroke::new(1.5, BG_5), egui::StrokeKind::Outside);
+        p.rect(pill, CornerRadius::same(8), UNREAD_RED, Stroke::new(1.5_f32, BG_5), egui::StrokeKind::Outside);
         p.galley(c - g.size() / 2.0, g, Color32::WHITE);
     }
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -2786,7 +2786,7 @@ fn tab(ui: &mut egui::Ui, label: &str, active: bool) {
         ui.painter().hline(
             rect.x_range().shrink(4.0),
             rect.bottom() - 2.0,
-            Stroke::new(3.0, BRAND),
+            Stroke::new(3.0_f32, BRAND),
         );
     }
 }
@@ -2813,7 +2813,7 @@ fn centered_column<R>(ui: &mut egui::Ui, side: f32, content_w: f32, add: impl Fn
 pub(crate) fn pinned_separator(ui: &mut egui::Ui) {
     ui.add_space(4.0);
     let r = ui.available_rect_before_wrap();
-    ui.painter().hline((r.left() + 20.0)..=(r.right() - 12.0), r.top(), Stroke::new(1.0, STROKE_2));
+    ui.painter().hline((r.left() + 20.0)..=(r.right() - 12.0), r.top(), Stroke::new(1.0_f32, STROKE_2));
     ui.add_space(6.0);
 }
 
@@ -2896,7 +2896,7 @@ pub fn filter_chip(ui: &mut egui::Ui, label: &str, on: bool, unread_badge: usize
             ui.spacing_mut().button_padding = Vec2::new(14.0, 4.0);
             let button = egui::Button::new(text.color(if on { Color32::WHITE } else { FG_2 }))
                 .fill(if on { BRAND } else { BG_1 })
-                .stroke(Stroke::new(1.0, if on { BRAND } else { STROKE_1 }))
+                .stroke(Stroke::new(1.0_f32, if on { BRAND } else { STROKE_1 }))
                 .corner_radius(CornerRadius::same(14))
                 .min_size(Vec2::new(0.0, 28.0));
             ui.add(button)
@@ -2915,7 +2915,7 @@ fn count_badge(p: &egui::Painter, c: egui::Pos2, n: usize, ring: Color32) {
     let g = p.layout_no_wrap(text, theme::strong(10.0), Color32::WHITE);
     let w = (g.size().x + 8.0).max(16.0);
     let pill = egui::Rect::from_center_size(c, Vec2::new(w, 16.0));
-    p.rect(pill, CornerRadius::same(8), UNREAD_RED, Stroke::new(1.5, ring), egui::StrokeKind::Outside);
+    p.rect(pill, CornerRadius::same(8), UNREAD_RED, Stroke::new(1.5_f32, ring), egui::StrokeKind::Outside);
     p.galley(c - g.size() / 2.0, g, Color32::WHITE);
 }
 
@@ -2932,7 +2932,7 @@ fn unread_button(ui: &mut egui::Ui, n: usize, active: bool) -> egui::Response {
     } else {
         p.circle_filled(c, 12.0, if n > 0 { UNREAD_RED } else { BG_1 });
         if n == 0 {
-            p.circle_stroke(c, 12.0, Stroke::new(1.0, STROKE_1));
+            p.circle_stroke(c, 12.0, Stroke::new(1.0_f32, STROKE_1));
         }
     }
     let text = if n > 99 { "99+".to_string() } else { n.to_string() };
@@ -3187,7 +3187,7 @@ fn channel_post(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, post: &Po
     ui.add_space(12.0);
     Frame::new()
         .fill(BG_1)
-        .stroke(Stroke::new(1.0, STROKE_2))
+        .stroke(Stroke::new(1.0_f32, STROKE_2))
         .corner_radius(CornerRadius::same(RADIUS_L))
         .inner_margin(Margin { left: 16, right: 16, top: 2, bottom: 10 })
         .show(ui, |ui| {
@@ -3209,7 +3209,7 @@ fn channel_post(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, post: &Po
             if !post.replies.is_empty() {
                 ui.add_space(8.0);
                 let r = ui.max_rect();
-                ui.painter().hline(r.x_range(), ui.cursor().top(), Stroke::new(1.0, STROKE_2));
+                ui.painter().hline(r.x_range(), ui.cursor().top(), Stroke::new(1.0_f32, STROKE_2));
                 ui.add_space(2.0);
                 let mut prev: Option<&Message> = None;
                 for m in &post.replies {
@@ -3329,7 +3329,7 @@ fn emoji(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, id: &str, alt: &
 fn quote_box(ui: &mut egui::Ui, q: &crate::html::Quote) -> egui::Response {
     let inner = Frame::new()
         .fill(BG_3)
-        .stroke(Stroke::new(1.0, STROKE_2))
+        .stroke(Stroke::new(1.0_f32, STROKE_2))
         .corner_radius(CornerRadius::same(RADIUS))
         .inner_margin(Margin { left: 14, right: 12, top: 6, bottom: 6 })
         .show(ui, |ui| {
@@ -3343,7 +3343,7 @@ fn quote_box(ui: &mut egui::Ui, q: &crate::html::Quote) -> egui::Response {
             ui.add(egui::Label::new(RichText::new(preview).font(theme::body()).color(FG_1)).wrap().selectable(false));
         });
     let r = inner.response.rect;
-    ui.painter().vline(r.left() + 4.0, (r.top() + 6.0)..=(r.bottom() - 6.0), Stroke::new(3.0, STROKE_1));
+    ui.painter().vline(r.left() + 4.0, (r.top() + 6.0)..=(r.bottom() - 6.0), Stroke::new(3.0_f32, STROKE_1));
     inner.response.interact(Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Show the quoted message")
 }
 
@@ -3351,7 +3351,7 @@ fn quote_box(ui: &mut egui::Ui, q: &crate::html::Quote) -> egui::Response {
 /// sideways when wider than the message.
 fn table(ui: &mut egui::Ui, t: &crate::html::Table, n: usize) {
     egui::ScrollArea::horizontal().id_salt(("table", n, ui.next_auto_id())).show(ui, |ui| {
-        Frame::new().stroke(Stroke::new(1.0, STROKE_2)).corner_radius(CornerRadius::same(RADIUS)).inner_margin(Margin::symmetric(8, 6)).show(ui, |ui| {
+        Frame::new().stroke(Stroke::new(1.0_f32, STROKE_2)).corner_radius(CornerRadius::same(RADIUS)).inner_margin(Margin::symmetric(8, 6)).show(ui, |ui| {
             egui::Grid::new(("message-table", n, ui.next_auto_id())).striped(true).spacing(Vec2::new(18.0, 6.0)).show(ui, |ui| {
                 for (r, row) in t.rows.iter().enumerate() {
                     for cell in row {

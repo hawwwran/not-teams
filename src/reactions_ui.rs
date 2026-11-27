@@ -105,11 +105,11 @@ pub fn pills(ui: &mut egui::Ui, media: &mut Media, message_id: &str, reactions: 
             let w = PILL_PAD + icon_w + 6.0 + count_g.size().x + PILL_PAD;
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, PILL_H), Sense::click());
             let (fill, stroke) = if r.mine {
-                (BRAND_TINT, Stroke::new(1.0, BRAND))
+                (BRAND_TINT, Stroke::new(1.0_f32, BRAND))
             } else if resp.hovered() {
-                (BG_4, Stroke::new(1.0, STROKE_1))
+                (BG_4, Stroke::new(1.0_f32, STROKE_1))
             } else {
-                (BG_1, Stroke::new(1.0, STROKE_2))
+                (BG_1, Stroke::new(1.0_f32, STROKE_2))
             };
             ui.painter().rect(rect, CornerRadius::same((PILL_H / 2.0) as u8), fill, stroke, egui::StrokeKind::Inside);
             let y = rect.center().y;
@@ -155,7 +155,7 @@ pub fn pills(ui: &mut egui::Ui, media: &mut Media, message_id: &str, reactions: 
 
 /// The small round "×" drawn on a reaction of mine while it's hovered: clicking removes it.
 fn remove_badge(ui: &egui::Ui, center: egui::Pos2) {
-    ui.painter().circle(center, 7.0, FG_2, Stroke::new(1.5, BG_1));
+    ui.painter().circle(center, 7.0, FG_2, Stroke::new(1.5_f32, BG_1));
     crate::icons::paint(ui, egui::Rect::from_center_size(center, Vec2::splat(9.0)), crate::icons::Icon::Dismiss, Color32::WHITE);
 }
 
@@ -180,7 +180,7 @@ pub fn hover_bar(ctx: &egui::Context, media: &mut Media, message_id: &str, react
         .show(ctx, |ui| {
             egui::Frame::new()
                 .fill(BG_1)
-                .stroke(Stroke::new(1.0, STROKE_2))
+                .stroke(Stroke::new(1.0_f32, STROKE_2))
                 .corner_radius(CornerRadius::same(RADIUS_L))
                 .shadow(egui::Shadow { offset: [0, 2], blur: 8, spread: 0, color: Color32::from_black_alpha(30) })
                 .inner_margin(egui::Margin::same(BAR_PAD as i8))
@@ -225,7 +225,7 @@ pub fn hover_bar(ctx: &egui::Context, media: &mut Media, message_id: &str, react
                         if own {
                             // A thin divider, then Edit and Delete for my own message.
                             let (gap, _) = ui.allocate_exact_size(Vec2::new(BAR_CELL * 0.4, BAR_CELL), Sense::hover());
-                            ui.painter().vline(gap.center().x, gap.y_range().shrink(6.0), Stroke::new(1.0, STROKE_2));
+                            ui.painter().vline(gap.center().x, gap.y_range().shrink(6.0), Stroke::new(1.0_f32, STROKE_2));
                             for (icon, tip, action) in [
                                 (crate::icons::Icon::Edit, "Edit", MediaAction::EditMessage { message_id: message_id.to_string() }),
                                 (crate::icons::Icon::Delete, "Delete", MediaAction::DeleteMessage { message_id: message_id.to_string() }),

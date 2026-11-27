@@ -165,7 +165,7 @@ fn link_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
 pub fn file_card(ui: &mut egui::Ui, media: &mut Media, file: &FileRef, max_w: f32) {
     Frame::new()
         .fill(BG_1)
-        .stroke(Stroke::new(1.0, STROKE_2))
+        .stroke(Stroke::new(1.0_f32, STROKE_2))
         .corner_radius(CornerRadius::same(RADIUS))
         .inner_margin(Margin::symmetric(12, 10))
         .show(ui, |ui| {
@@ -246,7 +246,7 @@ pub fn pending_chips(ui: &mut egui::Ui, media: &mut Media, paths: &[PathBuf]) ->
                 match (&tex, media.thumbs.get(p)) {
                     (Some(t), _) => {
                         egui::Image::new((t.id(), size)).corner_radius(radius).paint_at(ui, rect);
-                        ui.painter().rect_stroke(rect, radius, Stroke::new(1.0, STROKE_2), egui::StrokeKind::Inside);
+                        ui.painter().rect_stroke(rect, radius, Stroke::new(1.0_f32, STROKE_2), egui::StrokeKind::Inside);
                     }
                     (None, Some(Thumb::Failed)) => {
                         ui.painter().rect_filled(rect, radius, BG_4);
@@ -291,7 +291,7 @@ pub fn pending_chips(ui: &mut egui::Ui, media: &mut Media, paths: &[PathBuf]) ->
             let kind = p.extension().and_then(|e| e.to_str()).unwrap_or("");
             Frame::new()
                 .fill(BG_3)
-                .stroke(Stroke::new(1.0, STROKE_2))
+                .stroke(Stroke::new(1.0_f32, STROKE_2))
                 .corner_radius(CornerRadius::same(RADIUS))
                 .inner_margin(Margin::symmetric(8, 4))
                 .show(ui, |ui| {

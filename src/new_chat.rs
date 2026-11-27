@@ -62,13 +62,13 @@ impl NewChat {
             });
         });
         let line = ui.max_rect();
-        ui.painter().hline(line.x_range(), ui.cursor().top(), Stroke::new(1.0, STROKE_2));
+        ui.painter().hline(line.x_range(), ui.cursor().top(), Stroke::new(1.0_f32, STROKE_2));
 
         Frame::new().fill(BG_3).inner_margin(Margin::symmetric(20, 16)).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
             Frame::new()
                 .fill(BG_1)
-                .stroke(Stroke::new(1.0, STROKE_2))
+                .stroke(Stroke::new(1.0_f32, STROKE_2))
                 .corner_radius(CornerRadius::same(RADIUS))
                 .inner_margin(Margin::symmetric(12, 8))
                 .show(ui, |ui| {

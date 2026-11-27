@@ -62,7 +62,7 @@ pub fn paint_presence(p: &egui::Painter, center: egui::Pos2, r: f32, a: Availabi
         }
         Availability::Offline | Availability::Unknown => {
             p.circle_filled(center, r, ring);
-            p.circle_stroke(center, r - 0.8, Stroke::new(1.5, OFFLINE));
+            p.circle_stroke(center, r - 0.8, Stroke::new(1.5_f32, OFFLINE));
         }
     }
 }

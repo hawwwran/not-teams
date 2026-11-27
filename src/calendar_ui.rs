@@ -231,7 +231,7 @@ impl CalendarUi {
             self.day_headers(ui, &dates, col_w);
             self.all_day_strip(ui, &dates, &events, col_w);
             let line = ui.cursor().top();
-            ui.painter().hline(ui.max_rect().x_range(), line, Stroke::new(1.0, STROKE_2));
+            ui.painter().hline(ui.max_rect().x_range(), line, Stroke::new(1.0_f32, STROKE_2));
             let mut scroll = egui::ScrollArea::vertical().id_salt("calendar-grid").auto_shrink([false, false]);
             if !self.scrolled {
                 scroll = scroll.vertical_scroll_offset(8.0 * HOUR_H - 8.0);
@@ -386,7 +386,7 @@ impl CalendarUi {
             });
         });
         let y = ui.cursor().top();
-        ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, STROKE_2));
+        ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0_f32, STROKE_2));
     }
 
     fn day_headers(&self, ui: &mut egui::Ui, dates: &[NaiveDate], col_w: f32) {
@@ -431,14 +431,14 @@ impl CalendarUi {
         let p = ui.painter();
         for h in 0..24 {
             let y = grid.top() + h as f32 * HOUR_H;
-            p.hline((grid.left() + GUTTER)..=grid.right(), y, Stroke::new(1.0, STROKE_2));
+            p.hline((grid.left() + GUTTER)..=grid.right(), y, Stroke::new(1.0_f32, STROKE_2));
             if h > 0 {
                 p.text(egui::pos2(grid.left() + GUTTER - 8.0, y), Align2::RIGHT_CENTER, format!("{h:02}:00"), theme::caption(), FG_3);
             }
         }
         for i in 0..=dates.len() {
             let x = grid.left() + GUTTER + col_w * i as f32;
-            p.vline(x, grid.y_range(), Stroke::new(1.0, STROKE_2));
+            p.vline(x, grid.y_range(), Stroke::new(1.0_f32, STROKE_2));
         }
     }
 
@@ -465,7 +465,7 @@ impl CalendarUi {
             .show(ctx, |ui| {
                 Frame::new()
                     .fill(BG_1)
-                    .stroke(Stroke::new(1.0, STROKE_2))
+                    .stroke(Stroke::new(1.0_f32, STROKE_2))
                     .corner_radius(CornerRadius::same(RADIUS_L))
                     .shadow(egui::Shadow { offset: [0, 4], blur: 18, spread: 0, color: Color32::from_black_alpha(45) })
                     .inner_margin(Margin { left: 20, right: 16, top: 16, bottom: 16 })
@@ -475,7 +475,7 @@ impl CalendarUi {
                         let top = ui.max_rect();
                         let (fill, bar) = colours(&e);
                         let _ = fill;
-                        ui.painter().hline((top.left() - 20.0)..=(top.right() + 16.0), top.top() - 16.0 + 2.0, Stroke::new(4.0, bar));
+                        ui.painter().hline((top.left() - 20.0)..=(top.right() + 16.0), top.top() - 16.0 + 2.0, Stroke::new(4.0_f32, bar));
                         ui.horizontal(|ui| {
                             ui.add(egui::Label::new(RichText::new(&e.subject).font(theme::strong(18.0)).color(FG_1)).wrap());
                             ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
@@ -631,7 +631,7 @@ fn rsvp_buttons(ui: &mut egui::Ui, response: &str) -> Option<crate::calendar::Rs
             let size = Vec2::new(BUTTON_PADDING.x * 2.0 + 18.0 + 6.0 + text.size().x, 30.0);
             let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
             let fill = if !on && resp.hovered() { BG_HOVER } else { fill };
-            ui.painter().rect(rect, CornerRadius::same(RADIUS), fill, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
+            ui.painter().rect(rect, CornerRadius::same(RADIUS), fill, Stroke::new(1.0_f32, stroke), egui::StrokeKind::Inside);
             let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + BUTTON_PADDING.x + 9.0, rect.center().y), Vec2::splat(18.0));
             crate::icons::paint(ui, icon_rect, icon, if on { FG_ON_BRAND } else { colour });
             ui.painter().galley(egui::pos2(icon_rect.right() + 6.0, rect.center().y - text.size().y / 2.0), text, fg);
@@ -662,7 +662,7 @@ fn info_row(ui: &mut egui::Ui, icon: crate::icons::Icon, content: impl FnOnce(&m
 fn separator(ui: &mut egui::Ui) {
     ui.add_space(4.0);
     let r = ui.available_rect_before_wrap();
-    ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0, STROKE_2));
+    ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0_f32, STROKE_2));
     ui.add_space(6.0);
 }
 
@@ -759,12 +759,12 @@ fn paint_event(ui: &mut egui::Ui, e: &CalendarEvent, rect: egui::Rect) -> bool {
         // Tentative: stripes, as Teams draws it.
         let mut x = rect.left() - rect.height();
         while x < rect.right() {
-            p.line_segment([egui::pos2(x, rect.bottom()), egui::pos2(x + rect.height(), rect.top())], Stroke::new(3.0, BRAND_TINT));
+            p.line_segment([egui::pos2(x, rect.bottom()), egui::pos2(x + rect.height(), rect.top())], Stroke::new(3.0_f32, BRAND_TINT));
             x += 10.0;
         }
     }
     if matches!(e.show_as, ShowAs::Free | ShowAs::Tentative) || declined {
-        p.rect_stroke(rect, CornerRadius::same(RADIUS), Stroke::new(1.0, STROKE_1), egui::StrokeKind::Inside);
+        p.rect_stroke(rect, CornerRadius::same(RADIUS), Stroke::new(1.0_f32, STROKE_1), egui::StrokeKind::Inside);
     }
     p.rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(4.0, rect.height())), CornerRadius { nw: RADIUS, sw: RADIUS, ne: 0, se: 0 }, bar);
     let colour = if declined { FG_3 } else { FG_1 };
@@ -774,7 +774,7 @@ fn paint_event(ui: &mut egui::Ui, e: &CalendarEvent, rect: egui::Rect) -> bool {
         let font = egui::FontId::proportional((rect.height() - 3.0).clamp(9.0, 12.5));
         p.text(egui::pos2(rect.left() + 9.0, rect.center().y), Align2::LEFT_CENTER, line, font, colour);
         if e.cancelled {
-            p.hline((rect.left() + 9.0)..=(rect.right() - 4.0), rect.center().y, Stroke::new(1.0, FG_3));
+            p.hline((rect.left() + 9.0)..=(rect.right() - 4.0), rect.center().y, Stroke::new(1.0_f32, FG_3));
         }
         return resp.on_hover_text(format!("{} · {}", e.subject, time_range(e))).on_hover_cursor(egui::CursorIcon::PointingHand).clicked();
     }
@@ -784,7 +784,7 @@ fn paint_event(ui: &mut egui::Ui, e: &CalendarEvent, rect: egui::Rect) -> bool {
     let subject_h = subject.size().y;
     p.galley(egui::pos2(rect.left() + 9.0, y), subject.clone(), colour);
     if e.cancelled {
-        p.hline((rect.left() + 9.0)..=(rect.left() + 9.0 + subject.size().x), y + subject_h / lines.max(1) as f32 / 2.0, Stroke::new(1.0, FG_3));
+        p.hline((rect.left() + 9.0)..=(rect.left() + 9.0 + subject.size().x), y + subject_h / lines.max(1) as f32 / 2.0, Stroke::new(1.0_f32, FG_3));
     }
     y += subject_h + 1.0;
     if !e.all_day && y + 14.0 < rect.bottom() {
@@ -803,7 +803,7 @@ fn now_line(ui: &egui::Ui, grid: egui::Rect, dates: &[NaiveDate], col_w: f32) {
     let y = grid.top() + (now.hour() * 60 + now.minute()) as f32 / 60.0 * HOUR_H;
     let x0 = grid.left() + GUTTER + col_w * i as f32;
     let p = ui.painter();
-    p.hline(x0..=(x0 + col_w), y, Stroke::new(2.0, NOW_RED));
+    p.hline(x0..=(x0 + col_w), y, Stroke::new(2.0_f32, NOW_RED));
     p.circle_filled(egui::pos2(x0, y), 4.0, NOW_RED);
 }
 

@@ -118,11 +118,11 @@ pub fn install(ctx: &egui::Context) {
         style.visuals.extreme_bg_color = BG_1;
         style.visuals.override_text_color = Some(FG_1);
         style.visuals.selection.bg_fill = BRAND_TINT_HOVER;
-        style.visuals.selection.stroke = egui::Stroke::new(1.0, BRAND);
+        style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, BRAND);
         style.visuals.hyperlink_color = BRAND;
         style.visuals.widgets.hovered.bg_fill = BG_HOVER;
         style.visuals.widgets.hovered.weak_bg_fill = BG_HOVER;
-        style.visuals.text_cursor.stroke = egui::Stroke::new(1.5, FG_1);
+        style.visuals.text_cursor.stroke = egui::Stroke::new(1.5_f32, FG_1);
         style.spacing.item_spacing = egui::vec2(8.0, 4.0);
         style.text_styles.insert(egui::TextStyle::Body, body());
         style.text_styles.insert(egui::TextStyle::Button, body());
