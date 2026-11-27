@@ -347,6 +347,15 @@ impl Catalog {
 /// short list of choices rather than a dropdown: a dropdown's list opens as its own popup,
 /// and inside the call bar's popup that counts as a click outside and closes everything.
 pub fn pickers(ui: &mut eframe::egui::Ui, choice: &mut DeviceChoice, catalog: &mut Catalog) -> bool {
+    pick_all(ui, choice, catalog, false)
+}
+
+/// The same choices as dropdowns in a grid, for Settings, where the lists would be long.
+pub fn dropdowns(ui: &mut eframe::egui::Ui, choice: &mut DeviceChoice, catalog: &mut Catalog) -> bool {
+    pick_all(ui, choice, catalog, true)
+}
+
+fn pick_all(ui: &mut eframe::egui::Ui, choice: &mut DeviceChoice, catalog: &mut Catalog, dropdowns: bool) -> bool {
     catalog.poll();
     if catalog.lists.is_none() {
         catalog.refresh(ui.ctx());
@@ -357,13 +366,32 @@ pub fn pickers(ui: &mut eframe::egui::Ui, choice: &mut DeviceChoice, catalog: &m
     let before = choice.clone();
     choice.normalize();
     let mut changed = *choice != before;
-    changed |= picker(ui, "Microphone", &mut choice.microphone, &lists.microphones);
-    ui.add_space(6.0);
-    changed |= picker(ui, "Speaker", &mut choice.speaker, &lists.speakers);
-    ui.add_space(6.0);
-    changed |= picker(ui, "Camera", &mut choice.camera, &lists.cameras);
+    let rows = [
+        ("Microphone", &mut choice.microphone, &lists.microphones),
+        ("Speaker", &mut choice.speaker, &lists.speakers),
+        ("Camera", &mut choice.camera, &lists.cameras),
+    ];
+    if dropdowns {
+        eframe::egui::Grid::new("device-dropdowns").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
+            for (label, value, devices) in rows {
+                ui.label(eframe::egui::RichText::new(label).color(crate::theme::FG_1));
+                changed |= dropdown(ui, label, value, devices);
+                ui.end_row();
+            }
+        });
+    } else {
+        for (i, (label, value, devices)) in rows.into_iter().enumerate() {
+            if i > 0 {
+                ui.add_space(6.0);
+            }
+            changed |= picker(ui, label, value, devices);
+        }
+    }
     changed
 }
+
+/// What a saved device that isn't plugged in is called; it stays selected.
+const NOT_CONNECTED: &str = "Previous choice (not connected)";
 
 fn picker(ui: &mut eframe::egui::Ui, label: &str, value: &mut String, devices: &[Device]) -> bool {
     use eframe::egui::RichText;
@@ -373,10 +401,29 @@ fn picker(ui: &mut eframe::egui::Ui, label: &str, value: &mut String, devices: &
     for d in devices {
         ui.radio_value(value, d.id.clone(), &d.name);
     }
-    // A saved device that isn't plugged in stays selected, shown as such.
     if !value.is_empty() && !devices.iter().any(|d| d.id == *value) {
-        let _ = ui.radio(true, RichText::new("Previous choice (not connected)").color(crate::theme::FG_3));
+        let _ = ui.radio(true, RichText::new(NOT_CONNECTED).color(crate::theme::FG_3));
     }
+    *value != before
+}
+
+fn dropdown(ui: &mut eframe::egui::Ui, label: &str, value: &mut String, devices: &[Device]) -> bool {
+    let before = value.clone();
+    let shown = if value.is_empty() {
+        "System default".to_string()
+    } else {
+        devices.iter().find(|d| d.id == *value).map_or_else(|| NOT_CONNECTED.to_string(), |d| d.name.clone())
+    };
+    eframe::egui::ComboBox::from_id_salt(("device", label))
+        .selected_text(shown)
+        .width(280.0)
+        .truncate()
+        .show_ui(ui, |ui| {
+            ui.selectable_value(value, String::new(), "System default");
+            for d in devices {
+                ui.selectable_value(value, d.id.clone(), &d.name);
+            }
+        });
     *value != before
 }
 

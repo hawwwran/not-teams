@@ -67,6 +67,9 @@ pub struct TeamsApp {
     call: crate::call_ui::CallUi,
     /// Clicks on desktop notifications, and the incoming call's notification while it rings.
     notes: (crate::notify::NoteSender, std::sync::mpsc::Receiver<crate::notify::NoteAction>),
+    /// Unicorn mode's animations (sparkles, the galloping unicorn).
+    unicorn: crate::unicorn::Unicorn,
+    unicorn_forced: bool,
     call_note: Option<(String, crate::notify::CallNote)>,
     calendar: crate::calendar_ui::CalendarUi,
     /// Today's and tomorrow's events, for meeting reminders, and the ones already reminded.
@@ -265,6 +268,9 @@ impl TeamsApp {
             settings: crate::settings_ui::SettingsUi::new(settings, activity),
             call: Default::default(),
             notes: std::sync::mpsc::channel(),
+            unicorn: Default::default(),
+            // UNICORN: unicorn mode for this run only (never saved), for screenshots of it.
+            unicorn_forced: crate::brand::env("UNICORN").is_some(),
             call_note: None,
             calendar: Default::default(),
             upcoming: Vec::new(),
@@ -787,6 +793,7 @@ impl TeamsApp {
             local_id,
             attachments,
         });
+        self.unicorn.celebrate();
     }
 }
 
@@ -875,6 +882,11 @@ impl eframe::App for TeamsApp {
         }
         self.handle_events(ctx);
         self.poll(ctx);
+        // Before any panel, which may ask `unicorn::on`. Only the main screen dresses up.
+        let unicorn = (self.settings.settings.unicorn_mode || self.unicorn_forced)
+            && matches!(self.screen, Screen::Main)
+            && !self.call.extended_shown();
+        self.unicorn.frame(ctx, unicorn, &mut self.media.emoji);
         match &self.screen {
             Screen::Starting => self.starting_screen(ctx),
             Screen::SignIn { .. } => self.sign_in_screen(ctx),
@@ -1660,13 +1672,21 @@ impl TeamsApp {
             .show_separator_line(false)
             .show(ctx, |ui| {
                 let bar = ui.max_rect();
+                let unicorn = crate::unicorn::on(ctx);
+                if unicorn {
+                    // The bar's frame has a 12 px margin on each side; the rainbow spans it too.
+                    crate::unicorn::top_bar(ui.painter(), bar.expand2(egui::vec2(12.0, 0.0)));
+                }
                 ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0_f32, STROKE_2));
-                ui.horizontal_centered(|ui| {
+                // Where the logo ends, the search box sits and the buttons on the right begin,
+                // for unicorn mode's friends.
+                let (logo_right, search, tools_left) = ui.horizontal_centered(|ui| {
                     logo(ui);
+                    let logo_right = ui.min_rect().right();
                     let search_w = (ui.available_width() - 120.0).clamp(160.0, 680.0);
                     let pad = ((ui.available_width() - search_w) / 2.0 - 40.0).max(8.0);
                     ui.add_space(pad);
-                    Frame::new()
+                    let search = Frame::new()
                         .fill(BG_1)
                         .corner_radius(CornerRadius::same(RADIUS))
                         .inner_margin(Margin::symmetric(10, 6))
@@ -1710,8 +1730,10 @@ impl TeamsApp {
                                     search_now = true;
                                 }
                             });
-                        });
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        })
+                        .response
+                        .rect;
+                    let tools_left = ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let me = (!self.me_mri.is_empty()).then(|| self.me_mri.clone());
                         let r = crate::people_ui::avatar(ui, &mut self.media, &self.me_name, me.as_deref(), 32.0, true, BG_5)
                             .interact(Sense::click());
@@ -1741,8 +1763,16 @@ impl TeamsApp {
                                 let _ = self.worker.tx.send(Command::SignOut);
                             }
                         });
+                        ui.min_rect().left()
                     });
-                });
+                    (logo_right, search, tools_left.inner)
+                })
+                .inner;
+                if unicorn {
+                    let left = egui::Rangef::new(logo_right, search.left());
+                    let right = egui::Rangef::new(search.right(), tools_left);
+                    crate::unicorn::top_bar_friends(ui.painter(), ctx, &mut self.media.emoji, left, right, bar.center().y);
+                }
             });
         if search_now {
             let query = self.filter.trim().to_string();
@@ -1855,6 +1885,10 @@ impl TeamsApp {
                     if rail_item(ui, Icon::Calendar, Icon::Calendar, "Calendar", self.view == View::Calendar, 0).clicked() {
                         self.view = View::Calendar;
                     }
+                    if crate::unicorn::on(ui.ctx()) {
+                        let used = ui.min_rect().bottom();
+                        crate::unicorn::rail_friends(ui.painter(), ui.ctx(), &mut self.media.emoji, ui.max_rect(), used);
+                    }
                 });
             });
     }
@@ -1872,7 +1906,7 @@ impl TeamsApp {
                 Frame::new()
                     .inner_margin(Margin { left: 20, right: 12, top: 14, bottom: 10 })
                     .show(ui, |ui| {
-                        ui.label(RichText::new("Activity").font(theme::strong(20.0)));
+                        crate::unicorn::heading(ui, "Activity", theme::strong(20.0), FG_1);
                     });
                 clicked = crate::feed_ui::list(
                     ui,
@@ -1943,7 +1977,7 @@ impl TeamsApp {
                     })
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Chat").font(theme::strong(20.0)));
+                            crate::unicorn::heading(ui, "Chat", theme::strong(20.0), FG_1);
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 if crate::new_chat::button(ui, self.new_chat.is_some()).clicked() {
                                     self.channel_config = None;
@@ -2201,7 +2235,7 @@ impl TeamsApp {
                             ui.add_space(4.0);
                             ui.vertical(|ui| {
                                 ui.add_space(if team.is_some() { 8.0 } else { 18.0 });
-                                ui.label(RichText::new(&title).font(theme::strong(16.0)));
+                                crate::unicorn::heading(ui, &title, theme::strong(16.0), FG_1);
                                 if let Some(t) = &team {
                                     ui.label(RichText::new(t).font(theme::caption()).color(FG_3));
                                 }
@@ -2366,6 +2400,7 @@ impl TeamsApp {
             ui.ctx().request_repaint();
         }
         let content_h = Frame::new().fill(BG_3).show(ui, |ui| {
+            crate::unicorn::wallpaper(ui, &mut self.media.emoji);
             ui.set_min_size(ui.available_size());
             scroll.show(ui, |ui| {
                 let content_w = (width - 40.0).min(1000.0);
@@ -2626,6 +2661,9 @@ impl TeamsApp {
                     })
                     .inner
                 });
+                if crate::unicorn::on(ui.ctx()) {
+                    crate::unicorn::outline(ui.painter(), inner.response.rect, RADIUS as f32);
+                }
                 // Fluent inputs mark focus with a brand-coloured bottom edge.
                 if inner.inner.has_focus() {
                     let r = inner.response.rect;
@@ -2829,13 +2867,14 @@ pub(crate) fn chat_row(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, ch
         egui::pos2(rect.right() - 8.0, rect.bottom()),
     );
     let p = ui.painter();
+    let selected_fill = crate::unicorn::selected_row(ui.ctx()).unwrap_or(BG_SELECTED);
     if selected {
-        p.rect_filled(row, CornerRadius::same(RADIUS), BG_SELECTED);
+        p.rect_filled(row, CornerRadius::same(RADIUS), selected_fill);
     } else if resp.hovered() {
         p.rect_filled(row, CornerRadius::same(RADIUS), LIST_HOVER);
     }
     let av_c = egui::pos2(row.left() + 12.0 + 16.0, row.center().y);
-    let ring = if selected { BG_SELECTED } else if resp.hovered() { LIST_HOVER } else { LIST_BG };
+    let ring = if selected { selected_fill } else if resp.hovered() { LIST_HOVER } else { LIST_BG };
     let av_rect = egui::Rect::from_center_size(av_c, Vec2::splat(32.0));
     match &chat.team {
         // Channels get their team's square tile, as in Teams.
@@ -3076,7 +3115,8 @@ fn message_row(
             body = ui
                 .scope(|ui| {
                     if !m.text.is_empty() {
-                        message_bubble(ui, media, m, BRAND_TINT, max_bubble);
+                        let fill = crate::unicorn::my_bubble(ui.ctx(), &m.id).unwrap_or(BRAND_TINT);
+                        message_bubble(ui, media, m, fill, max_bubble);
                     }
                     crate::media_ui::attachments(ui, media, &m.images, &m.files, max_bubble);
                 })

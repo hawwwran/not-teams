@@ -23,6 +23,8 @@ macro_rules! icons {
 icons!(
     "like", "heart", "laugh", "surprised", "sad", "angry", "muscle", "check", "fire", "clap",
     "party", "smile", "wink", "cry", "thinking", "ok", "pray", "eyes", "hundred", "rofl",
+    // Unicorn mode's friends (src/unicorn.rs).
+    "unicorn", "rainbow", "sparkles", "rocket", "trex", "cat",
 );
 
 /// Which bundled icon a Teams reaction key uses. Keys are names ("like") or
@@ -108,7 +110,11 @@ pub struct Icons {
 impl Icons {
     /// The icon for a reaction key, if one is bundled for it.
     pub fn get(&mut self, ctx: &egui::Context, key: &str) -> Option<TextureHandle> {
-        let name = icon_name(key)?;
+        self.named(ctx, icon_name(key)?)
+    }
+
+    /// A bundled icon by its file name ("unicorn").
+    pub fn named(&mut self, ctx: &egui::Context, name: &'static str) -> Option<TextureHandle> {
         self.textures
             .entry(name)
             .or_insert_with(|| {
@@ -128,6 +134,7 @@ mod tests {
         for name in [
             "like", "heart", "laugh", "surprised", "sad", "angry", "muscle", "check", "fire", "clap",
             "party", "smile", "wink", "cry", "thinking", "ok", "pray", "eyes", "hundred", "rofl",
+            "unicorn", "rainbow", "sparkles", "rocket", "trex", "cat",
         ] {
             let img = rasterise(svg(name).unwrap()).unwrap_or_else(|| panic!("{name} didn't render"));
             assert!(img.pixels.iter().any(|p| p.a() > 0), "{name} is empty");

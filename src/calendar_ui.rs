@@ -356,7 +356,7 @@ impl CalendarUi {
         Frame::new().inner_margin(Margin::symmetric(20, 0)).show(ui, |ui| {
             ui.set_height(56.0);
             ui.horizontal_centered(|ui| {
-                ui.label(RichText::new("Calendar").font(theme::strong(20.0)).color(FG_1));
+                crate::unicorn::heading(ui, "Calendar", theme::strong(20.0), FG_1);
                 ui.add_space(16.0);
                 ui.spacing_mut().button_padding = BUTTON_PADDING;
                 let new = egui::Button::new(RichText::new("+ New event").color(FG_ON_BRAND).strong()).fill(BRAND).corner_radius(CornerRadius::same(RADIUS));

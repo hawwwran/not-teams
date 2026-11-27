@@ -43,6 +43,7 @@ mod theme;
 mod tray;
 mod trouter;
 mod ui;
+mod unicorn;
 mod video;
 mod worker;
 

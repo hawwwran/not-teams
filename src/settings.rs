@@ -46,6 +46,8 @@ pub struct Settings {
     pub sounds: crate::sounds::Choice,
     /// Download Cisco's OpenH264 codec for video in calls (src/codec.rs).
     pub cisco_h264: bool,
+    /// Rainbows and emoji friends around the window (src/unicorn.rs).
+    pub unicorn_mode: bool,
 }
 
 impl Default for Settings {
@@ -69,6 +71,7 @@ impl Default for Settings {
             meeting_start_alerts: true,
             sounds: Default::default(),
             cisco_h264: true,
+            unicorn_mode: false,
         }
     }
 }

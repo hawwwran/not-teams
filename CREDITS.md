@@ -1,7 +1,7 @@
 # Credits
 
 - Built using CraftAnything by ArtCraft.
-- Reaction icons: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) by Microsoft,
+- Reaction icons and unicorn mode's emoji: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) by Microsoft,
   Flat style, MIT licence (`assets/emoji/LICENSE`).
 - Interface icons: [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)
   by Microsoft, MIT licence (`assets/icons/LICENSE`).
