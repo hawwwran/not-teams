@@ -118,7 +118,7 @@ bump_version() {
 import html
 import re
 import sys
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 version, notes_file, metainfo = sys.argv[1:4]
@@ -151,7 +151,10 @@ if notes_file and Path(notes_file).is_file():
         elif line.strip() and bullets:
             bullets[-1] += " " + line.strip()
 
-entry = f'    <release version="{version}" date="{date.today().isoformat()}"'
+# The time too, not only the day: several releases on one day would otherwise tie, and
+# GNOME Software could show an older one as the newest.
+stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+entry = f'    <release version="{version}" date="{stamp}"'
 if bullets:
     items = "\n".join(f"          <li>{markup(b)}</li>" for b in bullets)
     entry += f">\n      <description>\n        <ul>\n{items}\n        </ul>\n      </description>\n    </release>\n"

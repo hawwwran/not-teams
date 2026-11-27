@@ -67,7 +67,7 @@
   </content_rating>
 
   <releases>
-    <release version="0.2.0" date="2026-11-27">
+    <release version="0.2.0" date="2026-11-27T14:00:49Z">
       <description>
         <ul>
           <li>Unicorn mode, under Settings &gt; General &gt; Appearance, adds rainbow and pastel colours to the main window. It adds a rainbow top bar and side panels, coloured rail buttons, filter chips and avatar rings, emoji in the free corners and a wallpaper behind messages. Your own messages get pastel bubbles, sparkles follow the pointer, and a unicorn runs across the window when you send a message.</li>
@@ -79,7 +79,7 @@
         </ul>
       </description>
     </release>
-    <release version="0.1.2" date="2026-11-27">
+    <release version="0.1.2" date="2026-11-27T12:13:17Z">
       <description>
         <ul>
           <li>Installing from the <code>.flatpakref</code> file on the hwnhub page now gives GNOME Software the app's summary, description, homepage and icon, so the NotTeams page no longer comes up blank on a first install.</li>
@@ -87,14 +87,14 @@
         </ul>
       </description>
     </release>
-    <release version="0.1.1" date="2026-11-27">
+    <release version="0.1.1" date="2026-11-27T10:09:31Z">
       <description>
         <ul>
           <li>The app's listing in GNOME Software now has screenshots of the chat and calendar views and a longer description of what NotTeams does.</li>
         </ul>
       </description>
     </release>
-    <release version="0.1.0" date="2026-11-27">
+    <release version="0.1.0" date="2026-11-27T08:51:08Z">
       <description>
         <ul>
           <li>Sign in with your Microsoft account by entering a short code on Microsoft's sign-in page. NotTeams keeps you signed in until you sign out.</li>
