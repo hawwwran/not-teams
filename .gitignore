@@ -3,3 +3,4 @@
 /shots/
 # Craft Anything working note, not part of the app
 /handoff.md
+.flatpak-builder/

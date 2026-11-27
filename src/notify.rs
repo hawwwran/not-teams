@@ -98,26 +98,7 @@ pub fn play_meeting_alert() {
 
 /// One ring of the "calling..." sound, repeated while the other side is being rung.
 pub fn play_ringback() {
-    play_theme_sound("phone-outgoing-calling");
-}
-
-/// A sound from the freedesktop theme by its name, without waiting for it.
-fn play_theme_sound(name: &'static str) {
-    std::thread::spawn(move || {
-        let played = std::process::Command::new("canberra-gtk-play")
-            .args(["-i", name, "-d", crate::brand::NAME])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if !played {
-            let _ = std::process::Command::new("pw-play")
-                .arg(format!("/usr/share/sounds/freedesktop/stereo/{name}.oga"))
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-        }
-    });
+    crate::sounds::play_ringback();
 }
 
 /// What a click on one of NotTeams' desktop notifications asks the window to do.

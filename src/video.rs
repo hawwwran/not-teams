@@ -7,8 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use openh264::OpenH264API;
-use openh264::decoder::Decoder;
+use openh264::decoder::{Decoder, DecoderConfig};
 use openh264::encoder::{BitRate, Encoder, EncoderConfig, FrameRate, Profile, UsageType};
 use openh264::formats::{RgbaSliceU8, YUVBuffer, YUVSource};
 
@@ -108,11 +107,14 @@ fn encode_with(
                     .max_frame_rate(FrameRate::from_hz(fps as f32))
                     .usage_type(usage)
                     .profile(Profile::Baseline);
-                Encoder::with_api_config(OpenH264API::from_source(), config).ok()
+                Encoder::with_api_config(crate::codec::api()?, config).ok()
             };
-            let Some(mut encoder) = make(base_bitrate, base_fps) else { return };
+            // Made once there's something to send; the codec may still be downloading when
+            // the call starts, so a missing one is tried again each second.
+            let mut encoder: Option<Encoder> = None;
+            let mut tried = Instant::now() - Duration::from_secs(1);
             // (bitrate, fps, width, height) the encoder was made for.
-            let mut made = (base_bitrate, base_fps, 0usize, 0usize);
+            let mut made = (0, 0, 0usize, 0usize);
             let mut last_seq = 0;
             let mut last_key = Instant::now() - KEYFRAME_EVERY;
             let mut was_on = false;
@@ -142,15 +144,23 @@ fn encode_with(
                 }
                 last_seq = frame.seq;
                 let (w, h) = limit.size_for(frame.width, frame.height);
-                if made != (bitrate, fps, w, h) {
+                if encoder.is_none() || made != (bitrate, fps, w, h) {
+                    if encoder.is_none() && tried.elapsed() < Duration::from_secs(1) {
+                        continue;
+                    }
+                    tried = Instant::now();
+                    let Some(e) = make(bitrate, fps) else {
+                        encoder = None;
+                        continue;
+                    };
                     if made.2 != 0 {
                         crate::call::call_log(&format!("sending video at {w}x{h}, {fps} fps, {} kbit/s", bitrate / 1000));
                     }
-                    let Some(e) = make(bitrate, fps) else { return };
-                    encoder = e;
+                    encoder = Some(e);
                     made = (bitrate, fps, w, h);
                     was_on = false;
                 }
+                let Some(encoder) = encoder.as_mut() else { continue };
                 // A fresh start (camera just turned on), a receiver asking, or the regular
                 // interval: keyframe.
                 if !was_on || limit.keyframe || last_key.elapsed() >= KEYFRAME_EVERY {
@@ -209,20 +219,30 @@ pub fn decode_loop(units: mpsc::Receiver<(Vec<u8>, Option<u64>)>, latest: Latest
     std::thread::Builder::new()
         .name("video-decode".into())
         .spawn(move || {
-            let Ok(mut decoder) = Decoder::new() else { return };
+            let new_decoder = || Decoder::with_api_config(crate::codec::api()?, DecoderConfig::new()).ok();
+            // As for encoding: a codec that arrives during the call is picked up then.
+            let mut decoder = None;
+            let mut tried = Instant::now() - Duration::from_secs(1);
             let mut seq = 0u64;
             let mut last_source = None;
             for (unit, source) in units {
                 // Someone else's stream: start clean rather than build on the last one's frames.
                 if source.is_some() && source != last_source {
                     if last_source.is_some() {
-                        if let Ok(d) = Decoder::new() {
-                            decoder = d;
-                        }
+                        decoder = None;
+                        // The switch comes with a keyframe; don't drop it waiting out a retry.
+                        tried = Instant::now() - Duration::from_secs(1);
                     }
                     last_source = source;
                 }
-                let Ok(Some(yuv)) = decoder.decode(&unit) else { continue };
+                if decoder.is_none() && tried.elapsed() >= Duration::from_secs(1) {
+                    decoder = new_decoder();
+                    if decoder.is_none() {
+                        tried = Instant::now();
+                    }
+                }
+                let Some(dec) = decoder.as_mut() else { continue };
+                let Ok(Some(yuv)) = dec.decode(&unit) else { continue };
                 let (width, height) = yuv.dimensions();
                 let mut rgba = vec![0u8; width * height * 4];
                 yuv.write_rgba8(&mut rgba);
@@ -319,13 +339,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs Cisco's codec, which NotTeams downloads on its first start"]
     fn encodes_and_decodes_a_frame() {
         let config = EncoderConfig::new().bitrate(BitRate::from_bps(BITRATE)).profile(Profile::Baseline);
-        let mut enc = Encoder::with_api_config(OpenH264API::from_source(), config).unwrap();
+        let mut enc = Encoder::with_api_config(crate::codec::api().expect("the downloaded codec"), config).unwrap();
         let rgba = vec![120u8; 64 * 48 * 4];
         let yuv = YUVBuffer::from_rgba8_source(RgbaSliceU8::new(&rgba, (64, 48)));
         let bits = enc.encode(&yuv).unwrap().to_vec();
-        let mut dec = Decoder::new().unwrap();
+        let mut dec = Decoder::with_api_config(crate::codec::api().unwrap(), DecoderConfig::new()).unwrap();
         let out = dec.decode(&bits).unwrap().expect("a picture");
         assert_eq!(out.dimensions(), (64, 48));
     }

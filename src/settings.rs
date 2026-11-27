@@ -44,6 +44,8 @@ pub struct Settings {
     pub meeting_start_alerts: bool,
     /// Which of the built-in sounds plays for a message, a call and a meeting starting.
     pub sounds: crate::sounds::Choice,
+    /// Download Cisco's OpenH264 codec for video in calls (src/codec.rs).
+    pub cisco_h264: bool,
 }
 
 impl Default for Settings {
@@ -66,6 +68,7 @@ impl Default for Settings {
             meeting_reminders: true,
             meeting_start_alerts: true,
             sounds: Default::default(),
+            cisco_h264: true,
         }
     }
 }

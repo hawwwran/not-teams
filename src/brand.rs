@@ -22,6 +22,12 @@ pub fn config_dir() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join(DATA_DIR)
 }
 
+/// Downloaded program parts (the H.264 codec): not settings, and kept out of the cache,
+/// which is pruned.
+pub fn data_dir() -> PathBuf {
+    dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join(DATA_DIR)
+}
+
 pub fn cache_dir() -> PathBuf {
     dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join(DATA_DIR)
 }

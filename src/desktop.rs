@@ -4,13 +4,19 @@
 //! (`com.hawwwran.notteams`) to an installed .desktop entry; a window without one gets a
 //! generic icon. So on start we make sure `~/.local/share` has our entry (pointing at the
 //! program that is running) and our icon, rewriting them only when they differ.
-//! `NOTTEAMS_NO_DESKTOP_ENTRY=1` turns this off.
+//! `NOTTEAMS_NO_DESKTOP_ENTRY=1` turns this off, and so does running as a Flatpak, which
+//! installs its own entry and icon.
+
+/// Whether NotTeams runs inside a Flatpak sandbox (Flatpak puts this file in every one).
+pub fn in_flatpak() -> bool {
+    std::path::Path::new("/.flatpak-info").exists()
+}
 
 #[cfg(target_os = "linux")]
 pub fn ensure_installed() {
     use std::path::PathBuf;
 
-    if crate::brand::env("NO_DESKTOP_ENTRY").is_some() {
+    if crate::brand::env("NO_DESKTOP_ENTRY").is_some() || in_flatpak() {
         return;
     }
     let Some(data) = dirs::data_dir() else { return };

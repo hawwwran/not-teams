@@ -180,6 +180,7 @@ impl SettingsUi {
                         .font(theme::caption())
                         .color(FG_3),
                 );
+                ui.label(RichText::new(crate::codec::NOTICE).font(theme::caption()).color(FG_3));
             });
         if close || modal.should_close() {
             self.about_open = false;
@@ -322,6 +323,8 @@ impl SettingsUi {
         ui.add_space(4.0);
         self.device_pickers(ui);
         ui.add_space(8.0);
+        self.video_codec(ui);
+        ui.add_space(8.0);
         ui.label(
             RichText::new("A test call reaches Teams' Echo service. It plays a short message, records you for a few seconds and plays the recording back, so you can check your microphone and speaker.")
                 .font(theme::caption())
@@ -336,6 +339,38 @@ impl SettingsUi {
             self.test_call_requested = true;
             self.open = false;
         }
+    }
+
+    /// Whether NotTeams downloads Cisco's H.264 codec, which video in calls needs.
+    fn video_codec(&mut self, ui: &mut egui::Ui) {
+        use crate::codec::{self, Status};
+        let mut on = self.settings.cisco_h264;
+        if ui.checkbox(&mut on, "Video in calls with Cisco's OpenH264 codec").changed() {
+            self.settings.cisco_h264 = on;
+            if let Err(e) = self.settings.save() {
+                self.note = Some(e);
+            }
+            codec::prepare();
+        }
+        let state = match codec::status() {
+            Status::Ready => "Downloaded and ready.".to_string(),
+            Status::Downloading => {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+                "Downloading from Cisco...".to_string()
+            }
+            Status::Off => "Off: from the next call on, calls have no video, yours or anyone else's.".to_string(),
+            Status::Failed(e) => format!("Couldn't download it ({e}); NotTeams tries again on its next start, or when you turn this off and on."),
+            Status::Unsupported => "Cisco publishes no build of it for this processor, so calls have no video.".to_string(),
+            Status::Unknown => String::new(),
+        };
+        ui.label(
+            RichText::new(format!(
+                "H.264 video is patented. Cisco covers the licence fees for its own build of the codec when your computer downloads it from Cisco, so NotTeams fetches it from Cisco instead of carrying one. Turning this off removes it. {state}"
+            ))
+            .font(theme::caption())
+            .color(FG_3),
+        );
+        ui.hyperlink_to(RichText::new("Cisco's licence for the codec").font(theme::caption()).color(BRAND), codec::LICENSE_URL);
     }
 
     /// Microphone, speaker and camera, saved at once; also shown in the call bar.

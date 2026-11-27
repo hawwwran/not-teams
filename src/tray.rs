@@ -130,7 +130,9 @@ fn tray_icon() -> Vec<ksni::Icon> {
 
 /// Starts the tray icon. `None` when the desktop has no tray (then closing quits).
 pub fn start(ctx: egui::Context, quit: Arc<QuitFlag>) -> Option<ksni::blocking::Handle<Tray>> {
+    // A sandbox may only own names under the app's id, not the spec's StatusNotifierItem-PID-N.
     Tray { ctx, quit, icon: tray_icon(), unread: 0 }
+        .disable_dbus_name(crate::desktop::in_flatpak())
         .spawn()
         .map_err(|e| eprintln!("No tray: {e}"))
         .ok()

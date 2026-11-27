@@ -209,6 +209,10 @@ impl CallUi {
                         }
                         if self.video.is_some() && self.can_camera {
                             let (icon, tip) = if self.camera_on { (Icon::Video, "Turn camera off") } else { (Icon::VideoOff, "Turn camera on") };
+                            let tip = match crate::codec::missing() {
+                                Some(why) => format!("{tip}. No video: {why}."),
+                                None => tip.to_string(),
+                            };
                             if round_button(ui, icon, !self.camera_on).on_hover_text(tip).clicked() {
                                 self.camera_on = !self.camera_on;
                                 if let Some(v) = &self.video {
@@ -331,6 +335,10 @@ impl CallUi {
                 crate::screen::ShareState::Choosing => ("Choosing", "Pick what to share in the dialog the desktop shows"),
                 crate::screen::ShareState::Sharing => ("Stop", "Stop sharing your screen"),
                 _ => ("Share", "Share your screen or an app window"),
+            };
+            let tip = match crate::codec::missing() {
+                Some(why) if !on => format!("{tip}. Can't share: {why}."),
+                _ => tip.to_string(),
             };
             if tool_button(ui, Icon::ShareScreen, label, on).on_hover_text(tip).clicked() {
                 let _ = tx.send(Command::ShareScreen(!on));

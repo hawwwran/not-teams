@@ -1,0 +1,75 @@
+# Flatpak manifest. .project-manager/release builds it from a clone of the
+# released commit and publishes the result to the hwnhub channel.
+#
+# Try it from a checkout:
+#   flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub \
+#     --force-clean target/flatpak-build com.hawwwran.notteams.yaml
+
+app-id: com.hawwwran.notteams
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  # libclang for bindgen: v4l2-sys-mit generates the camera bindings at build time.
+  - org.freedesktop.Sdk.Extension.llvm22
+command: notteams
+# hwnhub publishes on 'stable'; a build on flatpak-builder's default 'master'
+# would never show up as an update there.
+default-branch: stable
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  # X11 first, Wayland as the fallback: winit only delivers dropped files on
+  # X11, so NotTeams runs through XWayland when there is one (src/main.rs).
+  - --socket=x11
+  - --socket=wayland
+  # Files dropped on the window come as plain paths, not through a portal;
+  # the attach button uses the file chooser portal and needs none of this.
+  - --filesystem=home:ro
+  # Downloaded attachments are saved to Downloads (worker::download_folder).
+  - --filesystem=xdg-download
+  # Sounds, calls and the microphone; PipeWire answers on the Pulse socket.
+  - --socket=pulseaudio
+  # pw-dump and pw-metadata list and pick audio devices, pw-cli switches a
+  # Bluetooth headset to its call profile (src/devices.rs).
+  - --filesystem=xdg-run/pipewire-0
+  # Cameras: v4l opens /dev/video* directly (src/camera.rs); includes the GPU.
+  - --device=all
+  # Tray icon (ksni, without its own bus name inside a sandbox: src/tray.rs).
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+  # The unread badge on the taskbar entry (src/notify.rs).
+  - --talk-name=com.canonical.Unity
+  # Idle time across the whole desktop, for Away after 5 minutes (src/activity.rs).
+  - --talk-name=org.gnome.Mutter.IdleMonitor
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm22/bin
+  # cargo fetches the crates pinned in Cargo.lock during the build.
+  build-args:
+    - --share=network
+  env:
+    CARGO_HOME: /run/build/notteams/cargo
+    LIBCLANG_PATH: /usr/lib/sdk/llvm22/lib
+
+modules:
+  - name: notteams
+    buildsystem: simple
+    build-commands:
+      # Two jobs: the full build of WebRTC, the background-blur model runtime and
+      # the GUI is heavy on memory.
+      - cargo build --release --locked -j 2
+      - install -Dm755 target/release/notteams /app/bin/notteams
+      - install -Dm644 packaging/com.hawwwran.notteams.desktop /app/share/applications/com.hawwwran.notteams.desktop
+      - install -Dm644 packaging/com.hawwwran.notteams.svg /app/share/icons/hicolor/scalable/apps/com.hawwwran.notteams.svg
+      - install -Dm644 packaging/com.hawwwran.notteams.metainfo.xml /app/share/metainfo/com.hawwwran.notteams.metainfo.xml
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - target
+          - shots
+          - handoff.md
+          - .flatpak-builder

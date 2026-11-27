@@ -18,7 +18,9 @@ image = { version = "0.25", default-features = false, features = ["bmp", "gif", 
 ksni = { version = "0.3.7", features = ["blocking"] }
 log = "0.4"
 open = "5.4.5"
-openh264 = "0.9"
+# Cisco's binary, downloaded on first start (src/codec.rs), not compiled in: only Cisco's
+# own build is covered by its H.264 patent licence.
+openh264 = { version = "0.9", default-features = false, features = ["libloading"] }
 opus = "0.4"
 rand = "0.10.4"
 reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls", "form", "query", "gzip", "http2"] }

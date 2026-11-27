@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.hawwwran.notteams</id>
+  <name>NotTeams</name>
+  <summary>Unofficial native client for Microsoft Teams chats and calls</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <developer id="com.hawwwran">
+    <name>hawwwran</name>
+  </developer>
+
+  <description>
+    <p>
+      NotTeams is a small native desktop client for Microsoft Teams. It talks to the same
+      Microsoft services as the Teams web app, so your chats, channels and meetings are the
+      ones you see there. It is not made, endorsed or supported by Microsoft.
+    </p>
+    <ul>
+      <li>Chats and channels with pictures, files, reactions, replies and message search</li>
+      <li>One-to-one calls and Teams meetings with camera, screen sharing and background blur</li>
+      <li>Your presence and status, a calendar of your meetings and RSVP</li>
+      <li>Desktop notifications, a tray icon and a choice of sounds</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">com.hawwwran.notteams.desktop</launchable>
+
+  <url type="homepage">https://github.com/hawwwran/not-teams</url>
+  <url type="bugtracker">https://github.com/hawwwran/not-teams/issues</url>
+  <url type="vcs-browser">https://github.com/hawwwran/not-teams</url>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#e8ebfa</color>
+    <color type="primary" scheme_preference="dark">#5b5fc7</color>
+  </branding>
+
+  <categories>
+    <category>Network</category>
+    <category>Chat</category>
+    <category>InstantMessaging</category>
+  </categories>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+    <content_attribute id="social-info">mild</content_attribute>
+  </content_rating>
+
+  <releases>
+  </releases>
+</component>

@@ -13,6 +13,7 @@ mod camera;
 mod channel_config;
 mod datalink;
 mod clipboard;
+mod codec;
 mod desktop;
 mod devices;
 mod emoji;
@@ -977,6 +978,8 @@ fn main() -> eframe::Result<()> {
     } else {
         None
     };
+
+    codec::prepare();
 
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title(brand::NAME)

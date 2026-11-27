@@ -168,24 +168,59 @@ fn wav(samples: &[f32]) -> Vec<u8> {
 
 /// Plays the tone chosen in Settings for `event`, without waiting.
 pub fn play_for(event: Event) {
-    std::thread::spawn(move || play_now(crate::settings::Settings::load().sounds.tone(event)));
+    std::thread::spawn(move || {
+        let tone = crate::settings::Settings::load().sounds.tone(event);
+        play_file(tone.label(), || tone.samples());
+    });
 }
 
 /// Plays a tone without waiting (for trying one in Settings).
 pub fn play(tone: Tone) {
-    std::thread::spawn(move || play_now(tone));
+    std::thread::spawn(move || play_file(tone.label(), || tone.samples()));
 }
 
-fn play_now(tone: Tone) {
+/// One ring of the "calling..." sound, without waiting: the desktop's sound theme, or a soft
+/// two-tone ring made here where the theme isn't there (the Flatpak runtime has none).
+pub fn play_ringback() {
+    use std::process::{Command, Stdio};
+    const NAME: &str = "phone-outgoing-calling";
+    std::thread::spawn(|| {
+        let themed = Command::new("canberra-gtk-play")
+            .args(["-i", NAME, "-d", crate::brand::NAME])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if themed {
+            return;
+        }
+        let file = format!("/usr/share/sounds/freedesktop/stereo/{NAME}.oga");
+        if std::path::Path::new(&file).exists() {
+            let _ = Command::new("pw-play").arg(file).stdout(Stdio::null()).stderr(Stdio::null()).status();
+            return;
+        }
+        play_file("ringback", || {
+            let mut out = Vec::new();
+            add(&mut out, 0.0, 1.6, |t| {
+                let fade = (t / 0.05).min(1.0).min((1.6 - t) / 0.05).max(0.0);
+                ((TAU * 440.0 * t).sin() + (TAU * 480.0 * t).sin()) * fade
+            });
+            let peak = out.iter().fold(0f32, |m, s| m.max(s.abs())).max(1e-6);
+            out.iter().map(|s| s / peak * 0.4).collect()
+        });
+    });
+}
+
+fn play_file(name: &str, samples: impl FnOnce() -> Vec<f32>) {
     // Written once; the version in the name makes a changed sound be written again. Written
     // beside and renamed, so a second sound starting meanwhile never plays half a file.
-    let path = crate::brand::cache_dir().join("sounds").join(format!("{}-v1.wav", tone.label().to_lowercase()));
+    let path = crate::brand::cache_dir().join("sounds").join(format!("{}-v1.wav", name.to_lowercase()));
     if !path.exists() {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
         let part = path.with_extension(format!("{:?}.part", std::thread::current().id()).replace(['(', ')'], ""));
-        if std::fs::write(&part, wav(&tone.samples())).is_err() || std::fs::rename(&part, &path).is_err() {
+        if std::fs::write(&part, wav(&samples())).is_err() || std::fs::rename(&part, &path).is_err() {
             let _ = std::fs::remove_file(&part);
             return;
         }

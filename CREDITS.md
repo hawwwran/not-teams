@@ -9,8 +9,10 @@
   [cpal](https://github.com/RustAudio/cpal) (Apache-2.0), [libopus](https://opus-codec.org)
   via the `opus` crate (BSD/MIT/Apache-2.0), [tungstenite](https://github.com/snapview/tungstenite-rs)
   (MIT/Apache-2.0).
-- Video: [OpenH264](https://www.openh264.org) by Cisco (BSD-2-Clause) via the `openh264`
-  crate, [libv4l-rs](https://github.com/raymanfx/libv4l-rs) `v4l` crate (MIT).
+- Video: OpenH264 Video Codec provided by Cisco Systems, Inc. Not bundled: NotTeams downloads
+  Cisco's binary from ciscobinary.openh264.org on first start (Cisco's
+  [binary licence](https://www.openh264.org/BINARY_LICENSE.txt)), loaded through the
+  `openh264` crate (BSD-2-Clause); [libv4l-rs](https://github.com/raymanfx/libv4l-rs) `v4l` crate (MIT).
 - Background blur model: MediaPipe Selfie Segmentation (landscape) by Google, ONNX conversion
   from [onnx-community/mediapipe_selfie_segmentation_landscape](https://huggingface.co/onnx-community/mediapipe_selfie_segmentation_landscape),
   Apache License 2.0. Run with [tract](https://github.com/sonos/tract) (Apache 2.0 / MIT).

@@ -124,13 +124,30 @@ fn current_profile(dev: &serde_json::Value) -> Option<(u64, String)> {
     Some((p["index"].as_u64()?, p["name"].as_str().unwrap_or("").to_string()))
 }
 
+/// A PipeWire tool that changes something. Inside a Flatpak, WirePlumber lets a client only
+/// read unless it says it's a manager (its access rules for `pipewire.access = flatpak`).
+fn pw_writer(program: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    if crate::desktop::in_flatpak() {
+        cmd.env("PIPEWIRE_PROPS", "{ media.category = Manager }");
+    }
+    cmd
+}
+
+/// Through WirePlumber's `wpctl`, or PipeWire's own `pw-cli` where there's no `wpctl` (the
+/// Flatpak runtime).
 fn set_profile(device: u64, index: u64) -> bool {
-    std::process::Command::new("wpctl")
-        .args(["set-profile", &device.to_string(), &index.to_string()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    let run = |program: &str, args: &[&str]| {
+        pw_writer(program)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    let (device, index) = (device.to_string(), index.to_string());
+    run("wpctl", &["set-profile", &device, &index])
+        || run("pw-cli", &["set-param", &device, "Profile", &format!("{{ index: {index}, save: false }}")])
 }
 
 /// Puts a Bluetooth headset back in the profile it had before the call.
@@ -229,7 +246,7 @@ pub fn route_streams(choice: &DeviceChoice) -> usize {
             _ => continue,
         };
         let Some(id) = o["id"].as_u64() else { continue };
-        let mut cmd = std::process::Command::new("pw-metadata");
+        let mut cmd = pw_writer("pw-metadata");
         match target.strip_prefix(PIPEWIRE) {
             Some(node) => cmd.args([id.to_string().as_str(), "target.object", node]),
             None => cmd.args(["-d", id.to_string().as_str(), "target.object"]),

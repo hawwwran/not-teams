@@ -4,7 +4,18 @@ An unofficial native desktop client for Microsoft Teams chats, written in Rust. 
 same Microsoft cloud services as the Teams web app at teams.cloud.microsoft, so chats and
 messages are the same ones you see there. It is not made, endorsed or supported by Microsoft.
 
-## Start it
+## Install
+
+From hwnhub, a small self-hosted Flatpak channel:
+
+```sh
+flatpak install --user https://hawwwran.github.io/hwnhub/com.hawwwran.notteams.flatpakref
+```
+
+That adds the channel on the first install; `flatpak update` and GNOME Software bring new
+versions after that.
+
+## Build it yourself
 
 Build it with `cargo build --release`, then run `target/release/notteams`.
 
@@ -50,6 +61,21 @@ Building needs the ALSA and Opus development packages on Linux (`libasound2-dev`
 
 - Sign-in and settings: `~/.config/notteams`
 - Downloaded pictures and opened files: `~/.cache/notteams`
+- Cisco's H.264 video codec, downloaded on the first start: `~/.local/share/notteams/openh264`
+- The Flatpak keeps all of these under `~/.var/app/com.hawwwran.notteams/` instead, so
+  moving from a self-built copy to the Flatpak means signing in once more.
+- A self-built copy adds `~/.local/share/applications/com.hawwwran.notteams.desktop` and its
+  icon in `~/.local/share/icons/hicolor/scalable/apps/`. That entry wins over the Flatpak's
+  in the app menu, so remove both when switching to the Flatpak, then run
+  `update-desktop-database ~/.local/share/applications`.
 
 Builds from before the rename used `teams-rs` for both folders; the app moves them on its
 first start, so you stay signed in.
+
+## Releasing
+
+Releases are made with Project Manager, which runs `.project-manager/release`
+(`~/git/project-manager/docs/project-folder.md`): it bumps the version in `Cargo.toml`,
+`Cargo.lock` and the metainfo's release list, tags `vX.Y.Z`, builds the Flatpak from
+`com.hawwwran.notteams.yaml` with hwnhub's `publish.sh`, signs it into the channel and makes
+the GitHub release. Its "hwnhub channel" action publishes an existing tag again.
