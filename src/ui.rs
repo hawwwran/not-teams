@@ -70,6 +70,8 @@ pub struct TeamsApp {
     /// Unicorn mode's animations (sparkles, the galloping unicorn).
     unicorn: crate::unicorn::Unicorn,
     unicorn_forced: bool,
+    /// Our own window controls, while unicorn mode hides the desktop's title bar.
+    chrome: crate::chrome::Chrome,
     call_note: Option<(String, crate::notify::CallNote)>,
     calendar: crate::calendar_ui::CalendarUi,
     /// Today's and tomorrow's events, for meeting reminders, and the ones already reminded.
@@ -269,6 +271,7 @@ impl TeamsApp {
             call: Default::default(),
             notes: std::sync::mpsc::channel(),
             unicorn: Default::default(),
+            chrome: Default::default(),
             // UNICORN: unicorn mode for this run only (never saved), for screenshots of it.
             unicorn_forced: crate::brand::env("UNICORN").is_some(),
             call_note: None,
@@ -883,14 +886,22 @@ impl eframe::App for TeamsApp {
         self.handle_events(ctx);
         self.poll(ctx);
         // Before any panel, which may ask `unicorn::on`. Only the main screen dresses up.
-        let unicorn = (self.settings.settings.unicorn_mode || self.unicorn_forced)
-            && matches!(self.screen, Screen::Main)
-            && !self.call.extended_shown();
-        self.unicorn.frame(ctx, unicorn, &mut self.media.emoji);
+        let wanted = self.settings.settings.unicorn_mode || self.unicorn_forced;
+        let top_bar = matches!(self.screen, Screen::Main) && !self.call.extended_shown();
+        self.unicorn.frame(ctx, wanted && top_bar, &mut self.media.emoji);
+        // The desktop's title bar follows the setting alone: hiding and showing it changes the
+        // window's height, which shouldn't happen on every full-window screen share.
+        self.chrome.set(ctx, wanted);
         match &self.screen {
             Screen::Starting => self.starting_screen(ctx),
             Screen::SignIn { .. } => self.sign_in_screen(ctx),
             Screen::Main => self.main_screen(ctx),
+        }
+        if self.chrome.own() {
+            if !top_bar {
+                crate::chrome::floating_buttons(ctx);
+            }
+            crate::chrome::resize_edges(ctx);
         }
         if matches!(self.screen, Screen::Main) {
             self.paste_pictures(ctx);
@@ -1673,11 +1684,19 @@ impl TeamsApp {
             .show(ctx, |ui| {
                 let bar = ui.max_rect();
                 let unicorn = crate::unicorn::on(ctx);
-                if unicorn {
-                    // The bar's frame has a 12 px margin on each side; the rainbow spans it too.
-                    crate::unicorn::top_bar(ui.painter(), bar.expand2(egui::vec2(12.0, 0.0)));
+                let own_chrome = self.chrome.own();
+                // The bar's frame has a 12 px margin on each side; these span it too.
+                let full = bar.expand2(egui::vec2(12.0, 0.0));
+                if own_chrome {
+                    crate::chrome::drag_area(ui, full);
                 }
-                ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0_f32, STROKE_2));
+                if unicorn {
+                    crate::unicorn::top_bar(ui.painter(), full);
+                    let y = full.bottom() - crate::unicorn::DIVIDER / 2.0;
+                    crate::unicorn::divider(ui.painter(), egui::pos2(full.left(), y), egui::pos2(full.right(), y));
+                } else {
+                    ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0_f32, STROKE_2));
+                }
                 // Where the logo ends, the search box sits and the buttons on the right begin,
                 // for unicorn mode's friends.
                 let (logo_right, search, tools_left) = ui.horizontal_centered(|ui| {
@@ -1734,6 +1753,10 @@ impl TeamsApp {
                         .response
                         .rect;
                     let tools_left = ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if own_chrome {
+                            crate::chrome::buttons(ui);
+                            ui.add_space(10.0);
+                        }
                         let me = (!self.me_mri.is_empty()).then(|| self.me_mri.clone());
                         let r = crate::people_ui::avatar(ui, &mut self.media, &self.me_name, me.as_deref(), 32.0, true, BG_5)
                             .interact(Sense::click());
@@ -1850,6 +1873,12 @@ impl TeamsApp {
             .show_separator_line(false)
             .frame(Frame::new().fill(BG_5).inner_margin(Margin::symmetric(4, 4)))
             .show(ctx, |ui| {
+                if crate::unicorn::on(ctx) {
+                    let rail = ui.max_rect().expand(4.0);
+                    crate::unicorn::side_panel(ui.painter(), rail, 150);
+                    let x = rail.right() - crate::unicorn::DIVIDER / 2.0;
+                    crate::unicorn::divider(ui.painter(), egui::pos2(x, rail.top()), egui::pos2(x, rail.bottom()));
+                }
                 ui.vertical_centered(|ui| {
                     // The badge counts what hasn't been seen: opening Activity sees everything in
                     // it, though the items stay unread there. One that arrives while it's open
@@ -1902,7 +1931,7 @@ impl TeamsApp {
             .frame(Frame::new().fill(LIST_BG))
             .show(ctx, |ui| {
                 let panel = ui.max_rect();
-                ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0_f32, STROKE_2));
+                list_panel_backdrop(ui, panel);
                 Frame::new()
                     .inner_margin(Margin { left: 20, right: 12, top: 14, bottom: 10 })
                     .show(ui, |ui| {
@@ -1967,7 +1996,7 @@ impl TeamsApp {
             .frame(Frame::new().fill(LIST_BG))
             .show(ctx, |ui| {
                 let panel = ui.max_rect();
-                ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0_f32, STROKE_2));
+                list_panel_backdrop(ui, panel);
                 Frame::new()
                     .inner_margin(Margin {
                         left: 20,
@@ -2127,7 +2156,7 @@ impl TeamsApp {
                             ui.add_space(8.0);
                             ui.horizontal(|ui| {
                                 ui.add_space(20.0);
-                                ui.label(RichText::new("Channels").font(theme::strong(12.0)).color(FG_3));
+                                crate::unicorn::heading(ui, "Channels", theme::strong(12.0), FG_3);
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                     ui.add_space(12.0);
                                     if crate::settings_ui::small_cog(ui, "Choose teams and channels").clicked() {
@@ -2745,6 +2774,18 @@ fn logo(ui: &mut egui::Ui) {
     theme::logo(ui, 28.0);
 }
 
+/// The chat and activity lists' background and right edge: a grey line, or in unicorn mode
+/// a pastel glow and a rainbow line.
+fn list_panel_backdrop(ui: &egui::Ui, panel: egui::Rect) {
+    if crate::unicorn::on(ui.ctx()) {
+        crate::unicorn::side_panel(ui.painter(), panel, 45);
+        let x = panel.right() - crate::unicorn::DIVIDER / 2.0;
+        crate::unicorn::divider(ui.painter(), egui::pos2(x, panel.top()), egui::pos2(x, panel.bottom()));
+    } else {
+        ui.painter().vline(panel.right() - 0.5, panel.y_range(), Stroke::new(1.0_f32, STROKE_2));
+    }
+}
+
 fn rail_item(
     ui: &mut egui::Ui,
     regular: crate::icons::Icon,
@@ -2755,16 +2796,26 @@ fn rail_item(
 ) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(60.0, 56.0), Sense::click());
     let p = ui.painter();
-    if resp.hovered() && !active {
+    // Unicorn mode: each button its own colour, the chosen one on a white tile ringed in rainbow.
+    let ink = crate::unicorn::ink(ui.ctx(), label);
+    if ink.is_some() && active {
+        p.rect_filled(rect.shrink(3.0), CornerRadius::same(RADIUS_L), Color32::from_white_alpha(220));
+        crate::unicorn::outline(p, rect.shrink(3.0), RADIUS_L as f32);
+    } else if resp.hovered() && !active {
         p.rect_filled(rect.shrink(2.0), CornerRadius::same(RADIUS), BG_4);
     }
-    let colour = if active { BRAND } else { FG_3 };
+    let colour = match ink {
+        Some(c) if active => c,
+        Some(c) => c.gamma_multiply(0.75),
+        None if active => BRAND,
+        None => FG_3,
+    };
     if active {
         let bar = egui::Rect::from_min_size(
             egui::pos2(rect.left() - 4.0, rect.center().y - 10.0),
             Vec2::new(3.0, 20.0),
         );
-        p.rect_filled(bar, CornerRadius::same(2), BRAND);
+        p.rect_filled(bar, CornerRadius::same(2), colour);
     }
     let icon = if active { filled } else { regular };
     crate::icons::paint(ui, egui::Rect::from_center_size(rect.center() - Vec2::new(0.0, 8.0), Vec2::splat(24.0)), icon, colour);
@@ -2879,7 +2930,11 @@ pub(crate) fn chat_row(ui: &mut egui::Ui, media: &mut crate::media_ui::Media, ch
     match &chat.team {
         // Channels get their team's square tile, as in Teams.
         Some(team) => team_tile(ui.painter(), av_rect, team),
-        None => crate::people_ui::paint_avatar(ui, media, av_rect, &chat.title, chat.partner.as_deref(), true, ring),
+        None => {
+            // The ring first, so the status dot sits on top of it.
+            crate::unicorn::avatar_ring(ui.painter(), ui.ctx(), av_rect, &chat.id);
+            crate::people_ui::paint_avatar(ui, media, av_rect, &chat.title, chat.partner.as_deref(), true, ring);
+        }
     }
     let p = ui.painter();
 
@@ -2937,9 +2992,11 @@ pub fn filter_chip(ui: &mut egui::Ui, label: &str, on: bool, unread_badge: usize
     let resp = ui
         .scope(|ui| {
             ui.spacing_mut().button_padding = Vec2::new(14.0, 4.0);
+            let ink = crate::unicorn::ink(ui.ctx(), label);
+            let colour = ink.unwrap_or(BRAND);
             let button = egui::Button::new(text.color(if on { Color32::WHITE } else { FG_2 }))
-                .fill(if on { BRAND } else { BG_1 })
-                .stroke(Stroke::new(1.0_f32, if on { BRAND } else { STROKE_1 }))
+                .fill(if on { colour } else { BG_1 })
+                .stroke(Stroke::new(if ink.is_some() { 2.0_f32 } else { 1.0_f32 }, if on || ink.is_some() { colour } else { STROKE_1 }))
                 .corner_radius(CornerRadius::same(14))
                 .min_size(Vec2::new(0.0, 28.0));
             ui.add(button)
@@ -2989,7 +3046,7 @@ fn section_caption(ui: &mut egui::Ui, text: &str) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.add_space(20.0);
-        ui.label(RichText::new(text).font(theme::strong(12.0)).color(FG_3));
+        crate::unicorn::heading(ui, text, theme::strong(12.0), FG_3);
     });
     ui.add_space(2.0);
 }

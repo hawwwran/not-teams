@@ -11,6 +11,7 @@ mod call;
 mod call_ui;
 mod camera;
 mod channel_config;
+mod chrome;
 mod datalink;
 mod clipboard;
 mod codec;

@@ -285,6 +285,62 @@ pub fn selected_row(ctx: &egui::Context) -> Option<Color32> {
     on(ctx).then(|| pastel(RAINBOW.len() - 1, 0.6))
 }
 
+/// A top-to-bottom rainbow over a side panel (the rail, the chat list): `alpha` sets how bold.
+pub fn side_panel(painter: &Painter, rect: Rect, alpha: u8) {
+    let mut mesh = Mesh::default();
+    let rows = RAINBOW.len() - 1;
+    for i in 0..=rows {
+        let y = rect.top() + rect.height() * i as f32 / rows as f32;
+        let (r, g, b) = RAINBOW[i];
+        let colour = Color32::from_rgba_unmultiplied(r, g, b, alpha);
+        mesh.colored_vertex(Pos2::new(rect.left(), y), colour);
+        mesh.colored_vertex(Pos2::new(rect.right(), y), colour);
+    }
+    for i in 0..rows as u32 {
+        let (a, b, c, d) = (2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3);
+        mesh.add_triangle(a, b, c);
+        mesh.add_triangle(c, b, d);
+    }
+    painter.add(mesh);
+}
+
+/// Width of the rainbow lines between the top bar, the rail and the chat list.
+pub const DIVIDER: f32 = 3.0;
+
+/// A rainbow line from `from` to `to` along a panel's own edge, painted on the panel itself
+/// (so a window opened over it covers it); keep it `DIVIDER / 2` inside the panel, or the
+/// neighbouring panel paints over half of it.
+pub fn divider(painter: &Painter, from: Pos2, to: Pos2) {
+    let along = to - from;
+    let across = along.normalized().rot90() * (DIVIDER / 2.0);
+    let mut mesh = Mesh::default();
+    let stops = RAINBOW.len() - 1;
+    for i in 0..=stops {
+        let at = from + along * (i as f32 / stops as f32);
+        mesh.colored_vertex(at - across, rgb(i));
+        mesh.colored_vertex(at + across, rgb(i));
+    }
+    for i in 0..stops as u32 {
+        let (a, b, c, d) = (2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3);
+        mesh.add_triangle(a, b, c);
+        mesh.add_triangle(c, b, d);
+    }
+    painter.add(mesh);
+}
+
+/// A bold rainbow colour for something named `key` (a rail button, a filter chip), the same
+/// one every frame. `None` when unicorn mode is off.
+pub fn ink(ctx: &egui::Context, key: &str) -> Option<Color32> {
+    on(ctx).then(|| INK[hash(key) as usize % INK.len()])
+}
+
+/// A ring round a chat's round picture in the list, its colour picked by the chat's id.
+pub fn avatar_ring(painter: &Painter, ctx: &egui::Context, avatar: Rect, chat_id: &str) {
+    if let Some(colour) = ink(ctx, chat_id) {
+        painter.circle_stroke(avatar.center(), avatar.width() / 2.0 + 2.0, Stroke::new(2.0, colour));
+    }
+}
+
 /// A heading in rainbow letters while unicorn mode is on, in `colour` otherwise.
 pub fn heading(ui: &mut egui::Ui, text: &str, font: egui::FontId, colour: Color32) -> egui::Response {
     if !on(ui.ctx()) {
