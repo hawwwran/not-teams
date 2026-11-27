@@ -79,3 +79,30 @@ Releases are made with Project Manager, which runs `.project-manager/release`
 `Cargo.lock` and the metainfo's release list, tags `vX.Y.Z`, builds the Flatpak from
 `com.hawwwran.notteams.yaml` with hwnhub's `publish.sh`, signs it into the channel and makes
 the GitHub release. Its "hwnhub channel" action publishes an existing tag again.
+
+### What to back up for releases
+
+Compiling needs nothing secret: the source, the Flatpak SDK and the tools all come back by
+installing them again, and Cisco's codec is downloaded by each user's machine. Publishing
+needs one secret that can't be made again, the **hwnhub signing key** (GPG `022A7AF6D8ECA4A0CFA8B9077A0ABB595C41E61B`,
+valid until 2031-05-24). It isn't made per app or per release: the same key signs every
+release of every app in the channel, and installed copies only accept updates signed by it.
+Lose it and the channel has to start over with a new key, with every user adding the
+channel again; anyone who gets it can sign updates that every installed copy accepts.
+
+The key has no file of its own to copy: it lives inside GPG's keyring
+(`~/.gnupg/private-keys-v1.d/`, in GPG's internal format), and the commands below export it
+with its revocation certificate, which cancels the key if it is ever lost or leaked. They
+write outside this repository; move both files somewhere offline and encrypted (a password
+manager or an encrypted USB stick), then delete them from the home folder:
+
+```sh
+gpg --export-secret-keys --armor 022A7AF6D8ECA4A0CFA8B9077A0ABB595C41E61B > ~/hwnhub-signing-key.asc
+cp ~/.gnupg/openpgp-revocs.d/022A7AF6D8ECA4A0CFA8B9077A0ABB595C41E61B.rev ~/hwnhub-revocation.rev
+```
+
+On a new computer, `gpg --import hwnhub-signing-key.asc` and `gh auth login` are the only
+secrets the release script's `check` asks for; the tools it lists install again from apt and
+Flathub. The key expires on 2031-05-24: extend it before then (`gpg --quick-set-expire`) and
+work out how installed copies get the extended public key, since they keep the copy they
+were installed with.
