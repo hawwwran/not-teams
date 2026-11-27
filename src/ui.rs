@@ -167,7 +167,11 @@ impl TeamsApp {
         let settings = crate::settings::Settings::load();
         let activity = crate::activity::Activity::new(settings.always_available);
         let open_chat = std::sync::Arc::new(std::sync::Mutex::new(None));
-        let worker = Worker::spawn(cc.egui_ctx.clone(), open_chat.clone());
+        let worker = if crate::demo::enabled() {
+            crate::demo::spawn(cc.egui_ctx.clone())
+        } else {
+            Worker::spawn(cc.egui_ctx.clone(), open_chat.clone())
+        };
         // A `--screenshot` check is not me using Teams: don't report presence from it.
         if screenshot.is_none() {
             crate::activity::spawn_monitor(activity.clone(), worker.tx.clone());

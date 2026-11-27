@@ -76,3 +76,12 @@ Camera, screen sharing, the tray, sounds, device switching and drag and drop. A 
 One open question for Flathub specifically: NotTeams talks to Microsoft's services as an
 unofficial client, which Flathub may question. hwnhub, or a `.flatpak` bundle file shared
 directly, avoids that review.
+
+## Store listing
+
+The listing comes from `packaging/com.hawwwran.notteams.metainfo.xml`, built into each
+release, so a change shows in GNOME Software only after the next release. Its screenshots
+are fetched from `packaging/screenshots/` on GitHub's `main`. `packaging/screenshots/take.sh`
+retakes them from the demo mode (`NOTTEAMS_DEMO=1`, `src/demo.rs`): made-up people and
+chats, no network (not even the codec download), and settings, cache and data in a scratch
+folder of its own, so no real account appears in them.

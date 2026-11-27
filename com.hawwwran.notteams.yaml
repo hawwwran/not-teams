@@ -71,5 +71,6 @@ modules:
         skip:
           - target
           - shots
+          - packaging/screenshots
           - handoff.md
           - .flatpak-builder

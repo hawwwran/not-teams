@@ -15,13 +15,20 @@
     <p>
       NotTeams is a small native desktop client for Microsoft Teams. It talks to the same
       Microsoft services as the Teams web app, so your chats, channels and meetings are the
-      ones you see there. It is not made, endorsed or supported by Microsoft.
+      ones you see there. Where the desktop shows tray icons, it keeps running in the tray, so
+      messages and calls reach you with the window closed.
+    </p>
+    <p>
+      NotTeams is not made, endorsed or supported by Microsoft. Microsoft Teams is a trademark
+      of Microsoft Corporation.
     </p>
     <ul>
-      <li>Chats and channels with pictures, files, reactions, replies and message search</li>
-      <li>One-to-one calls and Teams meetings with camera, screen sharing and background blur</li>
-      <li>Your presence and status, a calendar of your meetings and RSVP</li>
-      <li>Desktop notifications, a tray icon and a choice of sounds</li>
+      <li>Chats and channels with pictures, files, reactions, replies, edits and message search</li>
+      <li>One-to-one audio and video calls, and Teams meetings with a pre-join screen, screen sharing and background blur</li>
+      <li>Presence and status messages, and you show as Away after 5 minutes without input</li>
+      <li>A calendar of your meetings: accept, decline and join them</li>
+      <li>Desktop notifications, an alert when a meeting starts, and a choice of sounds</li>
+      <li>Video uses Cisco's OpenH264 codec, downloaded from Cisco on first start</li>
     </ul>
   </description>
 
@@ -30,6 +37,17 @@
   <url type="homepage">https://github.com/hawwwran/not-teams</url>
   <url type="bugtracker">https://github.com/hawwwran/not-teams/issues</url>
   <url type="vcs-browser">https://github.com/hawwwran/not-teams</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Chats with reactions, presence and unread messages</caption>
+      <image>https://raw.githubusercontent.com/hawwwran/not-teams/main/packaging/screenshots/chat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Your meetings for the week</caption>
+      <image>https://raw.githubusercontent.com/hawwwran/not-teams/main/packaging/screenshots/calendar.png</image>
+    </screenshot>
+  </screenshots>
 
   <branding>
     <color type="primary" scheme_preference="light">#e8ebfa</color>

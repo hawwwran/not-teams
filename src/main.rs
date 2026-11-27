@@ -14,6 +14,7 @@ mod channel_config;
 mod datalink;
 mod clipboard;
 mod codec;
+mod demo;
 mod desktop;
 mod devices;
 mod emoji;
@@ -887,6 +888,9 @@ fn window_icon() -> Option<eframe::egui::IconData> {
 }
 
 fn main() -> eframe::Result<()> {
+    if demo::enabled() {
+        demo::isolate();
+    }
     // reqwest links aws-lc-rs and webrtc links ring; with both present rustls needs one named.
     let _ = rustls::crypto::ring::default_provider().install_default();
     call::install_stack_log();
@@ -969,7 +973,8 @@ fn main() -> eframe::Result<()> {
     }
 
     // One running copy: starting the app again just shows the existing window.
-    let instance = if screenshot.is_none() {
+    // A demo never hands over to (and so shows) a copy signed in to a real account.
+    let instance = if screenshot.is_none() && !demo::enabled() {
         match tray::already_running() {
             Ok(true) => return Ok(()),
             Ok(false) => None,
@@ -979,7 +984,10 @@ fn main() -> eframe::Result<()> {
         None
     };
 
-    codec::prepare();
+    // The demo shows no video, and downloads nothing.
+    if !demo::enabled() {
+        codec::prepare();
+    }
 
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title(brand::NAME)
