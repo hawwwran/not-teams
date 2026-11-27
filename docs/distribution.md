@@ -85,3 +85,13 @@ are fetched from `packaging/screenshots/` on GitHub's `main`. `packaging/screens
 retakes them from the demo mode (`NOTTEAMS_DEMO=1`, `src/demo.rs`): made-up people and
 chats, no network (not even the codec download), and settings, cache and data in a scratch
 folder of its own, so no real account appears in them.
+
+The `.flatpakref` file on the hwnhub page carries the app's id, title, channel address and
+signing key, and (since hwnhub 7c7a43c, from each app's next publish) its summary,
+description, homepage and icon, taken from the metainfo built into the release.
+Screenshots, licence and age rating come from GNOME Software's local copy of the channel's
+catalog, which Flatpak refreshes about once a day; until then a newly published app's page
+lacks them, and before hwnhub 7c7a43c it was bare (NotTeams' first release).
+`flatpak update --appstream <remote>` refreshes the copy at once (hwnhub's remote may be
+named after the app it was first installed with), then GNOME Software needs a restart
+(`gnome-software --quit`).
