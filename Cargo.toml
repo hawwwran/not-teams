@@ -1,6 +1,6 @@
 [package]
 name = "notteams"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 description = "NotTeams: an unofficial native desktop client for Microsoft Teams chats"
 license = "MIT"

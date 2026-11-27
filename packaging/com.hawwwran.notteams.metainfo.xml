@@ -67,6 +67,18 @@
   </content_rating>
 
   <releases>
+    <release version="0.2.0" date="2026-11-27">
+      <description>
+        <ul>
+          <li>Unicorn mode, under Settings &gt; General &gt; Appearance, adds rainbow and pastel colours to the main window. It adds a rainbow top bar and side panels, coloured rail buttons, filter chips and avatar rings, emoji in the free corners and a wallpaper behind messages. Your own messages get pastel bubbles, sparkles follow the pointer, and a unicorn runs across the window when you send a message.</li>
+          <li>While unicorn mode is on, NotTeams hides the desktop's title bar and shows its own minimise, maximise and close buttons in the top bar. Drag the bar's empty space to move the window, double-click it to maximise, and drag the window edges to resize. ### Fixes</li>
+          <li>The Settings window no longer grows taller than the app window and runs off screen. It now fits the window and scrolls. ### Improvements</li>
+          <li>Settings is split into four tabs: General, Notifications, Calls and Storage.</li>
+          <li>Devices in Settings are now picked from dropdown lists.</li>
+          <li>Save errors and cache notes now show at the bottom of Settings on every tab.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-11-27">
       <description>
         <ul>
