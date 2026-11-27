@@ -67,6 +67,17 @@
   </content_rating>
 
   <releases>
+    <release version="0.2.1" date="2026-11-27T15:33:55Z">
+      <description>
+        <ul>
+          <li>Calendar entries in Activity show the meeting organiser's name and picture instead of initials.</li>
+          <li>Calendar entries in Activity say whether a meeting was created, updated, cancelled or forwarded. Before, every entry read "updated a meeting", new invitations included.</li>
+          <li>Calendar entries in Activity show the meeting's time, or "all day".</li>
+          <li>Clicking a calendar entry in Activity opens the calendar on that week and shows the meeting's details, including meetings created a moment ago. Before, clicking did nothing.</li>
+          <li>GNOME Software no longer shows an older release as the newest when several releases come out on the same day.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-27T14:00:49Z">
       <description>
         <ul>
